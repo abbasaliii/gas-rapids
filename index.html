@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Gas Rapids</title>
+  <meta name="description" content="A four-player fart-powered raft race. One button each. Fart together or spin out." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Archivo:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- in-race HUD -->
+  <div id="hud" class="hud" hidden>
+    <div class="progress"><div class="progress-fill"></div><div class="progress-ticks"></div><div class="progress-raft">🛟</div></div>
+    <div class="topbar">
+      <div class="gasbars" id="gasbars"></div>
+      <div class="timer"><span class="clock">⏱</span><span id="timer">00:00.00</span></div>
+      <div class="right">
+        <button id="mic-hud" class="mic" hidden title="Toggle microphone (M)">🎤</button>
+        <div class="retries"><span>↻</span><span id="retries">0</span></div>
+      </div>
+    </div>
+    <div id="toast" class="toast"></div>
+    <div id="countdown" class="countdown"></div>
+    <div id="touch" class="touch"></div>
+  </div>
+
+  <!-- title -->
+  <div id="title" class="screen title">
+    <div class="logo"><span class="l1">GAS</span><span class="l2">RAPIDS</span></div>
+    <p class="tag">Four animals. One raft. One button each.</p>
+    <div class="seats" id="seats"></div>
+    <p class="hint">Press your fart key to take a seat. Empty seats are bots. <b>Space</b> starts.</p>
+    <div class="row">
+      <label class="opt"><input type="checkbox" id="opt-sound" checked /> Sound</label>
+      <label class="opt"><input type="checkbox" id="opt-bots" checked /> Bots fill empty seats</label>
+      <label class="opt">Level
+        <select id="opt-level"><option value="0">Jungle Rapids</option><option value="1">Canyon Slide</option></select>
+      </label>
+    </div>
+    <div class="row">
+      <button id="start" class="btn">Start race</button>
+      <button id="online" class="btn alt">Play online with friends</button>
+    </div>
+  </div>
+
+  <!-- online party -->
+  <div id="party" class="screen party" hidden>
+    <h1 class="h">PARTY</h1>
+    <div id="party-setup" class="panel">
+      <p class="hint">Create a party and send the link, or paste a friend's code. Voice chat is on for everyone in the party.</p>
+      <input id="pname" class="field" placeholder="Your name" maxlength="12" autocomplete="nickname" />
+      <div class="row">
+        <button id="host" class="btn">Create party</button>
+      </div>
+      <div class="row joinrow">
+        <input id="pcode" class="field code" placeholder="CODE" maxlength="5" autocapitalize="characters" />
+        <button id="join" class="btn alt">Join</button>
+      </div>
+      <p id="party-error" class="err"></p>
+      <button id="party-back" class="btn ghost">Back</button>
+    </div>
+    <div id="party-lobby" class="panel" hidden>
+      <div class="codebox">Party code <b id="code-out">-----</b></div>
+      <div class="row invite">
+        <input id="invite-link" class="field" readonly />
+        <button id="copy" class="btn alt">Copy invite link</button>
+      </div>
+      <div class="seats" id="lobby-seats"></div>
+      <div class="row">
+        <label class="opt" id="lobby-level-wrap">Level
+          <select id="lobby-level"><option value="0">Jungle Rapids</option><option value="1">Canyon Slide</option></select>
+        </label>
+        <button id="mic" class="btn ghost">🎤 Mic on</button>
+      </div>
+      <p id="lobby-status" class="hint"></p>
+      <div class="row">
+        <button id="lobby-start" class="btn">Start race</button>
+        <button id="leave" class="btn ghost">Leave party</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- finish -->
+  <div id="finish" class="screen finish" hidden>
+    <h1>FINISH</h1>
+    <div class="result"><span id="f-time">00:00.00</span><small id="f-sub">retries 0</small></div>
+    <div id="f-best" class="best"></div>
+    <div class="row">
+      <button id="again" class="btn">Race again</button>
+      <button id="menu" class="btn ghost">Menu</button>
+    </div>
+    <p id="f-wait" class="hint" hidden>Waiting for the host to start the next race…</p>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
