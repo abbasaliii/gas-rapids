@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy:web": "vite build && wrangler pages deploy dist --project-name gas-rapids",
+    "deploy:web": "vite build && wrangler deploy",
     "deploy:broker": "wrangler deploy -c server/wrangler.jsonc",
     "deploy": "npm run deploy:broker && npm run deploy:web"
   },
@@ -21,6 +21,7 @@
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.64.0",
     "vite": "^8.3.4",
     "wrangler": "^4.151.1"
   }

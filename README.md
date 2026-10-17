@@ -44,14 +44,16 @@ The `localhost` address only works on your own computer. To play with friends th
 
 Two hosts are set up. Both cost nothing.
 
-**Cloudflare Pages + your own broker (use this one, commercial use is allowed)**
+**Cloudflare + your own broker (the main one, commercial use is allowed)**
+
+Live at **https://play.gas-rapids.workers.dev**. Broker at `https://gas-rapids-broker.gas-rapids.workers.dev`.
 
 ```bash
 npx wrangler login          # once, opens the browser; a free Cloudflare account is enough, no card
 npm run deploy              # deploys the broker worker, then builds and deploys the site
 ```
 
-The first `deploy:broker` prints the worker URL, for example `gas-rapids-broker.<you>.workers.dev`. Put that host in `.env` as `VITE_PEER_HOST=` (see `.env.example`) so the game uses your broker instead of the public one, then run `npm run deploy:web`. The site is at `https://gas-rapids.pages.dev`.
+`wrangler.jsonc` at the root serves `dist/` as a Worker with static assets (Cloudflare has folded Pages into Workers). `.env` holds `VITE_PEER_HOST`, the broker's host, which is baked into the build so the game uses your broker instead of the public PeerJS one.
 
 The broker in `server/` is a 90-line Cloudflare Worker that speaks the PeerJS signaling protocol. It only relays the connection handshake; game data and voice never touch it, so the free plan's limits are nowhere near.
 

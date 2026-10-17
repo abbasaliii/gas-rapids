@@ -1,0 +1,7 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The game itself: static files from dist/ served by Cloudflare's free plan at https://play.gas-rapids.workers.dev
+  "name": "play",
+  "compatibility_date": "2026-01-01",
+  "assets": { "directory": "./dist" }
+}
