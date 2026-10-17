@@ -17,12 +17,12 @@ const { Bots } = await import('../src/bots.js');
 const fx = { gas: noop, ripple: noop, splash: noop, sparkle: noop, geyser: noop, confetti: noop, shake: 0 };
 const audio = new Proxy({}, { get: () => noop });
 
-export function simulate(idx, maxSec = 240, { hold = true } = {}) {
+export function simulate(idx, maxSec = 240, { hold = true, crew = 4 } = {}) {
   const level = LEVELS[idx];
   const track = buildTrack(level);
-  const raft = new Raft(track, fx, audio);
+  const raft = new Raft(track, fx, audio, crew);
   const bots = new Bots(track);
-  const humans = [true, false, false, false];
+  const humans = raft.seats.map((_, i) => i === 0);
   const FIXED = 1 / 120, FRAME = 1 / 60;
   let t = 0, trackTime = 0, acc = 0, lastRet = 0, lastD = 0, lastLat = 0, lastSp = 0;
   const deaths = [];
@@ -30,8 +30,8 @@ export function simulate(idx, maxSec = 240, { hold = true } = {}) {
   while (t < maxSec) {
     t += FRAME; trackTime += FRAME;
     track.update(trackTime, FRAME);
-    const mine = { fart: hold, aim: 0, pop: false };
     const botIn = bots.read(raft, FRAME, trackTime, humans, hold);
+    const mine = { fart: hold && !bots.braking, aim: 0, pop: false }; // a real player lets go when the crew shouts WAIT
     const merged = humans.map((h, i) => (h ? mine : botIn[i] || { fart: false, aim: 0, pop: false }));
     acc += FRAME;
     while (acc >= FIXED) { raft.step(FIXED, merged, t); acc -= FIXED; }
@@ -57,8 +57,9 @@ export function simulate(idx, maxSec = 240, { hold = true } = {}) {
 if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}` || process.argv[1].endsWith('run.mjs')) {
   const which = process.argv[2] !== undefined ? [+process.argv[2]] : LEVELS.map((_, i) => i);
   const maxSec = +(process.argv[3] || 240);
+  const crew = +(process.argv[4] || 4);
   for (const i of which) {
-    const r = simulate(i, maxSec);
+    const r = simulate(i, maxSec, { crew });
     const deaths = r.deaths.slice(0, 6).map((x) => `${x.kind}@d${x.d} lat${x.lat} sp${x.sp} dist${x.dist}${x.brake ? '(braking)' : ''}`).join(', ');
     console.log(`L${i + 1} ${r.name.padEnd(16)} ${r.finished ? 'finish ' + r.finished + 's' : 'TIMEOUT at d=' + r.d + '/' + r.finishD} retries=${r.retries} beans=${r.cans}${deaths ? '  deaths: ' + deaths : ''}`);
   }

@@ -8,40 +8,48 @@ const FORCE = 7.5;              // sustained fart thrust per player (m/s^2, raft
 const POP = 3.6;                // impulse (m/s) for a tap
 const DRAG = 0.85;              // linear drag vs water
 const DRAG2 = 0.02;             // quadratic drag, keeps top speed sane when all four push
-const SKEW = [0.16, -0.16, 0.16, -0.16]; // each jet leaves slightly off-centre, so a lone tooter slowly spins the raft
+const SKEW = 0.16;              // each jet leaves slightly off-centre, so a lone tooter slowly spins the raft
 const KEEL = 0.7;               // how hard the raft wants to face its motion (the original is loose and chaotic)
-/** Aim sign per seat so that D = "raft goes right" on the back/front seats and "push forward" on the side seats. */
-export const AIM_SIGN = [-1, -1, 1, 1];
 const ANG_DRAG = 2.1;
 const INERTIA = 4.2;
-const AIM_MAX = 0.75;           // radians the gas jet can be aimed
+const AIM_MAX = 1.1;            // radians the gas jet can be aimed (enough for a two-seat crew to hold against the current)
 const GAS_MAX = 100, DRAIN = 32, REGEN = 24, POP_COST = 9, EMPTY_LOCK = 22;
 const CAN_GAS = 45;
 
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+/** Seat layouts by crew size: angles around the raft, 0 = back, 90 = right. */
+export const LAYOUTS = { 1: [0], 2: [-48, 48], 3: [0, 125, 235], 4: [0, 90, 180, 270] };
 
-/** Seat i sits at angle i*90deg around the raft, index 0 at the back (local +z). */
-export function seatLocal(i) { const a = i * Math.PI / 2; return { x: Math.sin(a) * SEAT_R, z: Math.cos(a) * SEAT_R }; }
+const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export function rotY(x, z, yaw) { const c = Math.cos(yaw), s = Math.sin(yaw); return { x: x * c + z * s, z: -x * s + z * c }; }
+/** Build seat descriptors for a crew size: local position, jet skew and the aim sign that makes D feel right. */
+export function makeSeats(count) {
+  return LAYOUTS[count].map((deg, i) => {
+    const a = (deg * Math.PI) / 180;
+    const x = Math.sin(a) * SEAT_R, z = Math.cos(a) * SEAT_R;
+    const norm = ((deg % 360) + 360) % 360;
+    // back half and right side: D steers the raft right. Front half and left side: D pushes it forward.
+    const sign = norm > 90 && norm <= 270 ? 1 : -1;
+    return { angle: a, x, z, sign, skew: (i % 2 ? -1 : 1) * SKEW };
+  });
+}
 
 export class Raft {
-  constructor(track, effects, audio, active = [true, true, true, true]) {
-    this.track = track; this.fx = effects; this.audio = audio; this.active = active;
+  constructor(track, effects, audio, count = 4) {
+    this.track = track; this.fx = effects; this.audio = audio;
+    this.count = count; this.seats = makeSeats(count);
     this.x = 0; this.z = 0; this.yaw = 0; this.vx = 0; this.vz = 0; this.av = 0;
     this.hint = 0; this.d = 0; this.lat = 0;
     this.alive = true; this.respawnT = 0; this.retries = 0; this.finished = false;
     this.lastCp = 0; this.nextCp = 0; this.cans = 0;
     this.bump = 0; this.tiltX = 0; this.tiltZ = 0; this.deathT = 0; this.spawnT = 0;
     this.events = []; // 'checkpoint' | 'die' | 'respawn' | 'finish' | 'bump' | 'can' | 'geyser'
-    this.players = ROSTER.map((r, i) => ({ ...r, seat: i, gas: GAS_MAX, farting: false, empty: false, cooldown: 0, aim: 0, thrust: 0, human: false, active: active[i] }));
+    this.players = ROSTER.slice(0, count).map((r, i) => ({ ...r, seat: i, gas: GAS_MAX, farting: false, empty: false, cooldown: 0, aim: 0, thrust: 0, human: false }));
     this.buildMesh();
-    this.animals.forEach((a, i) => { a.group.visible = !!active[i]; });
     this.reset();
   }
 
   buildMesh() {
     const g = new THREE.Group();
-    // wooden plank deck
     const deckTex = (() => {
       const c = document.createElement('canvas'); c.width = c.height = 256; const ctx = c.getContext('2d');
       ctx.fillStyle = '#c98a4b'; ctx.fillRect(0, 0, 256, 256);
@@ -52,7 +60,6 @@ export class Raft {
     })();
     const deck = new THREE.Mesh(new THREE.CylinderGeometry(SEAT_R + 0.2, SEAT_R + 0.2, 0.25, 28), new THREE.MeshLambertMaterial({ map: deckTex }));
     deck.position.y = 0.35; deck.receiveShadow = true; g.add(deck);
-    // inflatable ring in alternating yellow / white segments
     const segs = 12;
     for (let i = 0; i < segs; i++) {
       const seg = new THREE.Mesh(new THREE.TorusGeometry(SEAT_R + 0.3, 0.55, 10, 4, Math.PI * 2 / segs + 0.02), new THREE.MeshLambertMaterial({ color: i % 2 ? 0xffd23f : 0xf7f7f2 }));
@@ -63,16 +70,12 @@ export class Raft {
     const under = new THREE.Mesh(new THREE.CylinderGeometry(SEAT_R + 0.85, SEAT_R + 0.7, 0.35, 28), new THREE.MeshLambertMaterial({ color: 0x3a6ea5 }));
     under.position.y = -0.05; g.add(under);
     const cushM = new THREE.MeshLambertMaterial({ color: 0x2f7ff0 });
-    for (let i = 0; i < 4; i++) {
-      const p = seatLocal(i);
+    this.animals = this.seats.map((st, i) => {
       const c = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.7), cushM);
-      c.position.set(p.x * 1.18, 0.55, p.z * 1.18); c.rotation.y = -i * Math.PI / 2; c.castShadow = true; g.add(c);
-    }
-    this.animals = ROSTER.map((r, i) => {
-      const a = makeAnimal(r.kind);
-      const p = seatLocal(i);
-      a.group.position.set(p.x, 0.45, p.z);
-      a.group.rotation.y = Math.atan2(-p.x, -p.z); // face the centre
+      c.position.set(st.x * 1.18, 0.55, st.z * 1.18); c.rotation.y = -st.angle; c.castShadow = true; g.add(c);
+      const a = makeAnimal(ROSTER[i].kind);
+      a.group.position.set(st.x, 0.45, st.z);
+      a.group.rotation.y = Math.atan2(-st.x, -st.z); // face the centre
       a.group.scale.setScalar(0.72);
       g.add(a.group);
       return a;
@@ -87,7 +90,7 @@ export class Raft {
     this.x = p.x; this.z = p.z; this.vx = 0; this.vz = 0; this.av = 0;
     this.yaw = Math.atan2(-s.tx, -s.tz);
     this.hint = s.d; this.alive = true; this.respawnT = 0; this.deathT = 0; this.spawnT = 0.6;
-    for (const pl of this.players) { pl.gas = GAS_MAX; pl.empty = false; pl.farting = false; }
+    for (const pl of this.players) { pl.gas = GAS_MAX; pl.empty = false; pl.farting = false; pl.thrust = 0; }
     this.mesh.visible = true;
   }
 
@@ -97,10 +100,18 @@ export class Raft {
     this.events.push('die');
     this.fx.splash(this.x, this.z, 26);
     this.audio.splash();
-    for (let i = 0; i < 4; i++) { if (this.players[i].farting) { this.players[i].farting = false; this.audio.fartStop(i); } }
+    this.players.forEach((pl, i) => { if (pl.farting) { pl.farting = false; this.audio.fartStop(i); } });
   }
 
-  /** inputs: array of 4 {fart, aim, pop} */
+  /** push direction (world) and seat position (world) for seat i at its current aim */
+  jet(i) {
+    const st = this.seats[i], pl = this.players[i];
+    const len = Math.hypot(st.x, st.z);
+    const r = rotY(-st.x / len, -st.z / len, pl.aim * AIM_MAX * st.sign + st.skew);
+    return { uw: rotY(r.x, r.z, this.yaw), rw: rotY(st.x, st.z, this.yaw) };
+  }
+
+  /** inputs: array of {fart, aim, pop, free} per seat */
   step(dt, inputs, time) {
     const T = this.track;
     if (!this.alive) {
@@ -109,9 +120,8 @@ export class Raft {
       return;
     }
     let fx = 0, fz = 0, torque = 0;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < this.players.length; i++) {
       const pl = this.players[i], inp = inputs[i] || {};
-      if (!pl.active) continue;
       pl.cooldown = Math.max(0, pl.cooldown - dt);
       pl.aim += (clamp(inp.aim || 0, -1, 1) - pl.aim) * Math.min(1, dt * 12);
       const want = !!inp.fart && !this.finished;
@@ -129,15 +139,9 @@ export class Raft {
       }
       if (farting !== pl.farting) { pl.farting = farting; farting ? this.audio.fartStart(i) : this.audio.fartStop(i); }
       this.animals[i].setFart(farting);
-      pl.thrust += ((farting ? 1 : 0) - pl.thrust) * Math.min(1, dt * (farting ? 9 : 14)); // smooth ramp in, quick ramp out
+      pl.thrust += ((farting ? 1 : 0) - pl.thrust) * Math.min(1, dt * (farting ? 9 : 14));
       if (pl.thrust < 0.02) continue;
-      const sl = seatLocal(i);
-      const len = Math.hypot(sl.x, sl.z);
-      let ux = -sl.x / len, uz = -sl.z / len;
-      const a = pl.aim * AIM_MAX * AIM_SIGN[i] + SKEW[i];
-      ({ x: ux, z: uz } = rotY(ux, uz, a));
-      const uw = rotY(ux, uz, this.yaw);
-      const rw = rotY(sl.x, sl.z, this.yaw);
+      const { uw, rw } = this.jet(i);
       const flutter = 1 + Math.sin(time * 31 + i * 1.7) * 0.18 + Math.sin(time * 7.3 + i) * 0.1; // the thrust sputters
       const F = FORCE * pl.thrust * flutter;
       fx += uw.x * F; fz += uw.z * F;
@@ -146,7 +150,6 @@ export class Raft {
       if (pl.pop) { this.vx += uw.x * POP; this.vz += uw.z * POP; this.av += (rw.z * uw.x - rw.x * uw.z) * POP * 0.6 / INERTIA; this.bump = Math.max(this.bump, 0.35); this.audio.pop(i); }
       this.emitGas(i, dt, pl.pop);
     }
-    // water current + drag (ice is slippery: far less drag and almost no keel)
     const near = T.nearest(this.x, this.z, this.hint);
     this.hint = near.i; this.d = near.d; this.lat = near.lat;
     const ice = T.iceAt(near.d);
@@ -158,12 +161,16 @@ export class Raft {
     fx += -rvx * (DRAG * dragK + DRAG2 * rsp); fz += -rvz * (DRAG * dragK + DRAG2 * rsp);
     // force fields
     for (const f of T.fields) {
+      if (f.type === 'fan') {
+        if (near.d >= f.d0 && near.d <= f.d1) { fx += near.s.lx * f.dir * f.strength; fz += near.s.lz * f.dir * f.strength; }
+        continue;
+      }
       const dx = this.x - f.x, dz = this.z - f.z, dist = Math.hypot(dx, dz);
       if (dist > f.r) continue;
       if (f.type === 'whirl') {
         const k = (f.r - dist) / f.r;
         const nx = dx / (dist || 1), nz = dz / (dist || 1);
-        fx += -nx * k * 9 + (-nz) * k * 7; fz += -nz * k * 9 + (nx) * k * 7; // pull in + spin around
+        fx += -nx * k * 9 + (-nz) * k * 7; fz += -nz * k * 9 + (nx) * k * 7;
         this.av += k * 2.2 * dt;
       } else if (f.type === 'geyser' && f.active && f.erupt !== this._lastErupt) {
         this._lastErupt = f.erupt;
@@ -188,7 +195,7 @@ export class Raft {
       const vn = this.vx * s.lx + this.vz * s.lz;
       if (vn * sign > 0) {
         this.vx -= s.lx * vn * 1.7; this.vz -= s.lz * vn * 1.7;
-        this.vx *= 0.9; this.vz *= 0.9;
+        if (Math.abs(vn) > 1.2) { this.vx *= 0.9; this.vz *= 0.9; } // scrub speed on impacts, not while merely leaning on the wall
         this.av += sign * 1.1 * Math.min(1, Math.abs(vn) / 6) * (Math.random() < 0.5 ? 1 : -1);
         this.hit(Math.abs(vn));
       }
@@ -212,7 +219,7 @@ export class Raft {
         this.x += nx * over; this.z += nz * over;
         const vn = this.vx * nx + this.vz * nz;
         if (vn < 0) { this.vx -= nx * vn * 1.6; this.vz -= nz * vn * 1.6; this.hit(-vn); }
-        if (o.kind === 'log') { this.vx += nx * 2 * dt * 60; this.vz += nz * 2 * dt * 60; this.av += (Math.random() - 0.5) * 0.4; }
+        if (o.kind === 'log' || o.kind === 'rock') { this.vx += nx * 2 * dt * 60; this.vz += nz * 2 * dt * 60; this.av += (Math.random() - 0.5) * 0.6; }
       }
     }
     // pickups
@@ -224,12 +231,10 @@ export class Raft {
         this.events.push('can'); this.audio.pickup(); this.fx.sparkle(p.x, p.z);
       }
     }
-    // checkpoints & finish
     if (this.nextCp < T.checkpoints.length && near.d >= T.checkpoints[this.nextCp]) {
       this.lastCp = T.checkpoints[this.nextCp]; this.nextCp++; this.events.push('checkpoint'); this.audio.chime();
     }
     if (!this.finished && near.d >= T.finishD) { this.finished = true; this.events.push('finish'); }
-    // wake ripples
     this.wakeT = (this.wakeT || 0) - dt;
     if (sp > 2 && this.wakeT <= 0) { this.wakeT = 0.22; this.fx.ripple(this.x - this.vx / sp * 2, this.z - this.vz / sp * 2, 1.1); }
     this.bump = Math.max(0, this.bump - dt * 3);
@@ -241,9 +246,7 @@ export class Raft {
     pl.puffT = (pl.puffT || 0) - dt;
     if (pl.puffT > 0 && !pop) return;
     pl.puffT = 0.035;
-    const sl = seatLocal(i); const len = Math.hypot(sl.x, sl.z);
-    const r = rotY(-sl.x / len, -sl.z / len, pl.aim * AIM_MAX * AIM_SIGN[i]);
-    const uw = rotY(r.x, r.z, this.yaw), rw = rotY(sl.x, sl.z, this.yaw);
+    const { uw, rw } = this.jet(i);
     const bx = this.x + rw.x * 1.2, bz = this.z + rw.z * 1.2;
     this.fx.gas(bx, bz, -uw.x, -uw.z, pop ? 3 : 1);
     if (Math.random() < 0.3) this.fx.ripple(bx - uw.x * 1.5, bz - uw.z * 1.5, 0.5);
@@ -256,7 +259,6 @@ export class Raft {
       d: Math.round(this.d), a: this.alive ? 1 : 0, r: this.retries, c: this.nextCp, f: this.finished ? 1 : 0, tc: +trackTime.toFixed(2),
       k: this.track.pickups.map((p) => (p.taken ? 1 : 0)).join(''),
       p: this.players.map((p) => [Math.round(p.gas), p.farting ? 1 : 0, p.empty ? 1 : 0, +p.aim.toFixed(2)]),
-      act: this.players.map((p) => (p.active ? 1 : 0)).join(''),
     };
   }
   /** Blend toward a host snapshot; plays the same sounds and effects a local simulation would. */
@@ -270,9 +272,8 @@ export class Raft {
     if (!this.alive && s.a) this.spawnT = 0.6;
     this.alive = !!s.a;
     if (s.k) this.track.pickups.forEach((p, i) => { const taken = s.k[i] === '1'; if (taken && !p.taken) { this.fx.sparkle(p.x, p.z); this.audio.pickup(); } p.taken = taken; p.mesh.visible = !taken; });
-    if (s.act) this.players.forEach((pl, i) => { pl.active = s.act[i] === '1'; this.animals[i].group.visible = pl.active; });
     s.p.forEach(([gas, farting, empty, aim], i) => {
-      const pl = this.players[i];
+      const pl = this.players[i]; if (!pl) return;
       pl.gas = gas; pl.aim = aim;
       if (!!farting !== pl.farting) { pl.farting = !!farting; pl.farting ? this.audio.fartStart(i) : this.audio.fartStop(i); }
       if (!!empty && !pl.empty) this.audio.sputter(i);
@@ -293,7 +294,6 @@ export class Raft {
   syncMesh(t, dt) {
     this.mesh.position.set(this.x, 0, this.z);
     this.mesh.rotation.y = this.yaw;
-    // death: deflate and spin away; respawn: pop back in
     if (this.deathT > 0) {
       this.deathT -= dt;
       const k = Math.max(0, this.deathT / 0.5);
@@ -304,7 +304,6 @@ export class Raft {
     }
     if (!this.alive) { this.mesh.visible = false; return; }
     this.mesh.visible = true;
-    this.body.rotation.y = 0;
     if (this.spawnT > 0) { this.spawnT -= dt; const k = 1 - Math.max(0, this.spawnT / 0.6); const s = 1 + Math.sin(k * Math.PI) * 0.25; this.body.scale.set(k * s, k * s, k * s); }
     else this.body.scale.setScalar(1);
     const local = rotY(this.vx, this.vz, -this.yaw);
@@ -313,8 +312,8 @@ export class Raft {
     this.tiltZ += (tz - this.tiltZ) * Math.min(1, dt * 6);
     this.body.rotation.x = this.tiltX + Math.sin(t * 1.7) * 0.025 + this.bump * Math.sin(t * 30) * 0.08;
     this.body.rotation.z = this.tiltZ + Math.cos(t * 1.3) * 0.025;
+    this.body.rotation.y = this.av * -0.02;
     this.body.position.y = Math.sin(t * 2.1) * 0.05 - this.bump * 0.15 + (this.finished ? Math.abs(Math.sin(t * 6)) * 0.3 : 0);
     for (const a of this.animals) { a.setCheer(this.finished); a.update(t); }
-    this.body.rotation.y = this.av * -0.02; // tiny counter-twist sells the spin
   }
 }

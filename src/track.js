@@ -201,7 +201,8 @@ export function buildTrack(level) {
   const checkpoints = [];
   const boosts = [], ices = [];
   let finishD = length - 10;
-  const rollers = [], hammers = [], logs = [], whirls = [], geysers = [], cans = [], lavas = [];
+  const rollers = [], hammers = [], logs = [], whirls = [], geysers = [], cans = [], lavas = [], traps = [], crushers = [], twisters = [], fans = [];
+  const timed = []; // {d, span, safe(t)} hazards the crew must time
 
   const archMat = flat(0xff8a3d);
   function arch(dist, tex, { h = 7, bannerW = 10, bannerH = 2.4 } = {}) {
@@ -316,7 +317,9 @@ export function buildTrack(level) {
       g.position.set(s.x, 0, s.z); g.rotation.y = yawAt(f.d); group.add(g);
       const ob = { type: 'circle', lethal: true, x: s.x, z: s.z, r: 1.5, kind: 'hammer', active: false };
       obstacles.push(ob);
-      hammers.push({ pivot, ob, s, period: f.period || 3, phase: f.phase || 0, arm, h });
+      const hm = { pivot, ob, s, period: f.period || 3, phase: f.phase || 0, arm, h };
+      hammers.push(hm); ob.timed = true;
+      timed.push({ d: f.d, span: 4, kind: 'hammer', safe: (t) => Math.abs(1.3 * Math.sin((t * Math.PI * 2) / hm.period + hm.phase)) >= 0.26 });
     } else if (f.type === 'log') {
       const len = f.len || 5;
       const g = new THREE.Group();
@@ -364,6 +367,73 @@ export function buildTrack(level) {
         const crack = new THREE.Mesh(new THREE.PlaneGeometry(2.5 + rand() * 3, 0.18), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
         crack.rotation.x = -Math.PI / 2; crack.rotation.z = rand() * 3; crack.position.set(ss.x + ss.lx * (rand() - 0.5) * ss.w * 1.4, 0.025, ss.z + ss.lz * (rand() - 0.5) * ss.w * 1.4); group.add(crack);
       }
+    } else if (f.type === 'rock') {
+      const p = posAt(f.d, usable(f.lat));
+      const r = f.r || 1.5;
+      const m = new THREE.Mesh(rockG, flat(th.decor === 'ice' ? 0xdfe9f3 : 0x8d8f99));
+      m.position.set(p.x, 0.15, p.z); m.scale.set(r, r * 0.8, r); m.rotation.set(rand(), rand() * 6, rand()); m.castShadow = true; group.add(m);
+      obstacles.push({ type: 'circle', lethal: false, x: p.x, z: p.z, r: r * 0.9, kind: 'rock' });
+    } else if (f.type === 'trap') {
+      const p = posAt(f.d, usable(f.lat));
+      const g = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.9, 0.25, 16), flat(0x4b4b58)); base.position.y = 0.05; g.add(base);
+      const spikes = new THREE.Group();
+      for (let k = 0; k < 7; k++) {
+        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.6, 6), spikeMat);
+        const a = (k / 7) * Math.PI * 2, rr = k === 0 ? 0 : 1.1;
+        sp.position.set(Math.cos(a) * rr, 0.8, Math.sin(a) * rr); spikes.add(sp);
+      }
+      spikes.position.y = -1.9; g.add(spikes);
+      const warn = new THREE.Mesh(new THREE.CircleGeometry(1.7, 16), new THREE.MeshBasicMaterial({ color: 0xff3b1f, transparent: true, opacity: 0 })); warn.rotation.x = -Math.PI / 2; warn.position.y = 0.2; g.add(warn);
+      g.position.copy(p); group.add(g);
+      const ob = { type: 'circle', lethal: true, x: p.x, z: p.z, r: 0, kind: 'trap', timed: true };
+      obstacles.push(ob);
+      const tr = { spikes, warn, ob, period: f.period || 3.5, phase: f.phase || 0 };
+      traps.push(tr);
+      timed.push({ d: f.d, span: 3.5, kind: 'trap', safe: (t) => { const ph = ((t + tr.phase) % tr.period) / tr.period; return ph > 0.4 && ph < 0.93; } });
+    } else if (f.type === 'crusher') {
+      const g = new THREE.Group();
+      const blocks = [];
+      for (const sign of [-1, 1]) {
+        const b = new THREE.Group();
+        const box = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.2, 3), flat(0x5a5a68)); box.castShadow = true; b.add(box);
+        for (let k = 0; k < 6; k++) { const sp = new THREE.Mesh(miniSpike, spikeMat); sp.position.set(-sign * 1.6, (k % 3 - 1) * 0.7, (Math.floor(k / 3) - 0.5) * 1.6); sp.rotation.z = sign * Math.PI / 2; b.add(sp); }
+        b.position.set(sign * (s.w + 0.4), 1.1, 0); g.add(b); blocks.push(b);
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(s.w, 0.3, 0.3), flat(0x2b2b33)); rail.position.set(sign * (s.w / 2 + 0.4), 2.4, 0); g.add(rail);
+      }
+      g.position.set(s.x, 0, s.z); g.rotation.y = yawAt(f.d); group.add(g);
+      const obs = [-1, 1].map((sign) => { const ob = { type: 'circle', lethal: true, x: s.x, z: s.z, r: 1.9, kind: 'crusher', timed: true, sign }; obstacles.push(ob); return ob; });
+      const cr = { blocks, obs, s, period: f.period || 4, phase: f.phase || 0, reach: s.w + 0.4 - 2.3 };
+      crushers.push(cr);
+      timed.push({ d: f.d, span: 3.5, kind: 'crusher', safe: (t) => 0.5 + 0.5 * Math.sin((t * Math.PI * 2) / cr.period + cr.phase) < 0.35 });
+    } else if (f.type === 'twister') {
+      const g = new THREE.Group();
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(4.5, 24), new THREE.MeshBasicMaterial({ color: 0x1b5fc9, transparent: true, opacity: 0.55 }));
+      disc.rotation.x = -Math.PI / 2; disc.position.y = 0.02; g.add(disc);
+      const swirl = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), new THREE.MeshBasicMaterial({ map: ringTexture.swirl(), transparent: true, opacity: 0.85, depthWrite: false }));
+      swirl.rotation.x = -Math.PI / 2; swirl.position.y = 0.03; g.add(swirl);
+      g.position.set(s.x, 0, s.z); group.add(g);
+      const field = { type: 'whirl', x: s.x, z: s.z, r: 6 };
+      fields.push(field);
+      twisters.push({ g, swirl, field, s, period: f.period || 6, range: s.w - 3 });
+    } else if (f.type === 'fan') {
+      const sign = f.side === 'L' ? 1 : -1;          // fan stands on this bank...
+      const d0 = f.d, d1 = Math.min(length, f.d + (f.len || 30));
+      fields.push({ type: 'fan', d0, d1, dir: -sign, strength: 3.5 }); // ...and blows toward the other
+      const mid = at((d0 + d1) / 2);
+      const g = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 4, 8), flat(0x4b4b58)); pole.position.y = H + 2; g.add(pole);
+      const hub = new THREE.Group(); hub.position.y = H + 4.2;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.18, 8, 20), flat(0xffd23f)); hub.add(ring);
+      const blades = new THREE.Group();
+      for (let k = 0; k < 4; k++) { const bl = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.4, 0.08), flat(0xffffff)); bl.position.y = 0.75; const pv = new THREE.Group(); pv.rotation.z = (k / 4) * Math.PI * 2; pv.add(bl); blades.add(pv); }
+      hub.add(blades); g.add(hub);
+      g.position.set(mid.x + mid.lx * sign * (mid.w + 2.5), 0, mid.z + mid.lz * sign * (mid.w + 2.5));
+      g.rotation.y = yawAt((d0 + d1) / 2) + (sign > 0 ? -Math.PI / 2 : Math.PI / 2);
+      group.add(g);
+      const streakM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 });
+      for (let dd = d0; dd < d1; dd += 5) { const ss = at(dd); const st = new THREE.Mesh(new THREE.PlaneGeometry(ss.w * 1.6, 0.14), streakM); st.rotation.x = -Math.PI / 2; st.rotation.z = yawAt(dd); st.position.set(ss.x, 0.04, ss.z); group.add(st); }
+      fans.push({ blades });
     } else if (f.type === 'checkpoint') {
       checkpoints.push(f.d);
       arch(f.d, textTexture('CHECKPOINT', { bg: '#ffd23f', font: 'bold 78px "Lilita One", "Archivo", sans-serif' }), { h: 6.5, bannerW: 9, bannerH: 2.2 });
@@ -423,10 +493,28 @@ export function buildTrack(level) {
       g.glow.material.opacity = active ? 0.9 : 0.25 + 0.2 * Math.sin(t * 6);
       g.glow.scale.setScalar(active ? 1.6 : 1);
     }
+    for (const tr of traps) {
+      const ph = ((t + tr.phase) % tr.period) / tr.period;
+      const up = ph < 0.32;
+      const target = up ? 0 : -1.9;
+      tr.spikes.position.y += (target - tr.spikes.position.y) * Math.min(1, dt * 14);
+      tr.ob.r = tr.spikes.position.y > -0.9 ? 1.6 : 0;
+      tr.warn.material.opacity = ph > 0.88 ? 0.4 + 0.4 * Math.sin(t * 30) : 0;
+    }
+    for (const cr of crushers) {
+      const k = 0.5 + 0.5 * Math.sin((t * Math.PI * 2) / cr.period + cr.phase);
+      cr.blocks.forEach((b, i) => { const sign = i ? 1 : -1; b.position.x = sign * (cr.s.w + 0.4 - k * cr.reach); const lat = -b.position.x; cr.obs[i].x = cr.s.x + cr.s.lx * lat; cr.obs[i].z = cr.s.z + cr.s.lz * lat; });
+    }
+    for (const tw of twisters) {
+      const lat = Math.sin((t * Math.PI * 2) / tw.period) * tw.range;
+      tw.field.x = tw.s.x + tw.s.lx * lat; tw.field.z = tw.s.z + tw.s.lz * lat;
+      tw.g.position.set(tw.field.x, 0, tw.field.z); tw.swirl.rotation.z = -t * 1.8;
+    }
+    for (const fn of fans) fn.blades.rotation.z = t * 9;
     for (const c of cans) if (!c.taken) { c.mesh.position.y = 1.1 + Math.sin(t * 2.5 + c.phase) * 0.15; c.mesh.rotation.y = t * 1.2; }
     for (const l of lavas) l.core.scale.setScalar(1 + 0.12 * Math.sin(t * 3 + l.phase));
     for (const c of clouds) c.position.x += c.userData.v * dt;
   }
 
-  return { group, samples: S, length, finishD, checkpoints, obstacles, fields, pickups, boosts, nearest, at, posAt, currentAt, iceAt, update, theme: th, geysers, hammers };
+  return { group, samples: S, length, finishD, checkpoints, obstacles, fields, pickups, boosts, nearest, at, posAt, currentAt, iceAt, update, theme: th, geysers, hammers, timed };
 }

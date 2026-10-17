@@ -54,12 +54,12 @@ let G = null;       // current game
 let mode = 'title'; // title | levels | party | game | finish
 let clock = 0;
 let selectedLevel = 0;
-let players = 1, crewBots = true;
-try { players = Math.min(4, Math.max(1, +localStorage.getItem('tootriver-players') || 1)); crewBots = localStorage.getItem('tootriver-bots') !== '0'; } catch {}
+let players = 1, crewBots = false;
+try { players = Math.min(4, Math.max(1, +localStorage.getItem('tootriver-players') || 1)); } catch {} // crew bots are off every launch: the raft carries exactly the players you pick
 const setPlayers = (n) => { players = n; try { localStorage.setItem('tootriver-players', n); } catch {} input.claimed = [0, 1, 2, 3].map((i) => i < n); renderSeats(); };
-const setBots = (on) => { crewBots = on; try { localStorage.setItem('tootriver-bots', on ? '1' : '0'); } catch {} renderSeats(); };
-/** which seats have a body in them this race: humans, plus crew bots if enabled */
-const activeSeats = () => [0, 1, 2, 3].map((i) => i < players || crewBots);
+const setBots = (on) => { crewBots = on; renderSeats(); };
+/** how many animals sit on the raft this race: the humans, or a full crew of four if bots fill in */
+const crewSize = () => (crewBots ? 4 : players);
 
 function show(screen) { for (const s of [ui.title, ui.levels, ui.party, ui.finish]) s.hidden = s !== screen; }
 
@@ -124,7 +124,7 @@ function toonify(root) {
 }
 
 // ---------------------------------------------------------------- game setup
-function loadLevel(idx, active) {
+function loadLevel(idx, crew) {
   if (G) scene.remove(G.track.group, G.raft.mesh);
   const level = LEVELS[idx];
   const track = buildTrack(level);
@@ -132,7 +132,7 @@ function loadLevel(idx, active) {
   scene.background = new THREE.Color(level.theme.sky);
   scene.fog = new THREE.Fog(level.theme.fog, 90, 280);
   hemi.groundColor.set(level.theme.bankTop);
-  const raft = new Raft(track, effects, audio, active);
+  const raft = new Raft(track, effects, audio, crew);
   toonify(track.group); toonify(raft.mesh);
   scene.add(raft.mesh);
   return { level, track, raft };
@@ -142,14 +142,14 @@ function startGame(opts = {}) {
   audio.init(); audio.setEnabled(ui.sound.checked); audio.setMusic(ui.music.checked);
   const online = opts.online || null; // 'host' | 'client' | null
   const idx = online ? net.level : selectedLevel;
-  const { level, track, raft } = loadLevel(idx, online ? [true, true, true, true] : activeSeats());
+  const { level, track, raft } = loadLevel(idx, online ? Math.max(1, net.crew || net.seats.filter(Boolean).length) : crewSize());
   if (online) raft.players.forEach((p, i) => { p.name = net.seats[i] ? net.seats[i].name : p.name; });
   const hud = new Hud(raft.players);
   hud.setTicks(track.checkpoints, track.length);
   hud.show(true);
   G = { idx, level, online, track, raft, bots: new Bots(track), hud, time: 0, trackTime: 0, phase: online === 'client' ? 'client' : 'countdown', cd: 3.9, cdShown: null, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false, snap: null, lastSnap: 0, hintT: 0 };
-  if (online) { hud.setRoles(net.seats.map((s, i) => (!s ? false : i === net.mySeat ? true : s.name))); ui.micHud.hidden = false; }
-  else { hud.setRoles(localRoles(), activeSeats()); ui.micHud.hidden = true; }
+  if (online) { hud.setRoles(net.seats.slice(0, raft.count).map((s, i) => (!s ? false : i === net.mySeat ? true : s.name))); ui.micHud.hidden = false; }
+  else { hud.setRoles(localRoles()); ui.micHud.hidden = true; }
   hud.toast(`${idx + 1}. ${level.name.toUpperCase()}`);
   audio.stopMusic(); audio.startMusic('race');
   show(null);
@@ -274,21 +274,21 @@ function renderLobby() {
     const talking = s && (mine ? speaking.has('me') : speaking.has(s.id));
     return `<div class="seat ${s ? 'human' : ''} ${mine ? 'me' : ''} ${talking ? 'speaking' : ''}" style="--c:${r.color}">
       <div class="face">${r.emoji}</div><div class="who">${r.name}</div>
-      <div class="name">${s ? s.name + (mine ? ' (you)' : '') : 'Crew bot'}</div></div>`;
+      <div class="name">${s ? s.name + (mine ? ' (you)' : '') : 'empty'}</div></div>`;
   }).join('');
   const n = net.seats.filter(Boolean).length;
   ui.lobbyStatus.textContent = net.role === 'host'
-    ? (n < 2 ? 'Share the link. You can start whenever you like; empty seats are crew bots.' : `${n} players in. Start when everyone is here.`)
+    ? (n < 2 ? 'Share the link. Only the people who join sit on the raft.' : `${n} players in. Start when everyone is here.`)
     : 'Waiting for the host to start. Everyone uses Space + A/D (or any seat keys, a gamepad, or touch).';
   if (net.role !== 'host') ui.lobbyLevel.value = String(net.level);
 }
-function hostStart() { net.broadcast({ t: 'start', level: net.level }); startGame({ online: 'host' }); }
+function hostStart() { net.crew = Math.max(1, net.seats.filter(Boolean).length); net.broadcast({ t: 'start', level: net.level, crew: net.crew }); startGame({ online: 'host' }); }
 ui.lobbyStart.addEventListener('click', hostStart);
 
 net.on('lobby', () => { if (mode === 'party') renderLobby(); net.voice.sync(); if (G && G.online) G.hud.setNames(net.seats.map((s, i) => (s ? s.name : ROSTER[i].name))); });
 net.on('welcome', () => { ui.lobby.hidden = false; });
 net.on('full', () => partyError('That party is full.'));
-net.on('start', (d) => { net.level = d.level; startGame({ online: 'client' }); });
+net.on('start', (d) => { net.level = d.level; net.crew = d.crew || 4; startGame({ online: 'client' }); });
 net.on('s', (d) => { if (G && G.online === 'client') G.snap = d; });
 net.on('ev', (d) => {
   if (!G || G.online !== 'client') return;
@@ -366,7 +366,7 @@ function tick(now, render = true) {
         if (G.cd > -1) { G.cd -= dt; if (G.cd < -0.9) { hud.countdown(''); if (G.online === 'host') net.broadcast({ t: 'ev', e: 'cd', v: '' }); } }
         let merged;
         if (G.online === 'host') {
-          const occupied = net.seats.map(Boolean);
+          const occupied = raft.seats.map(() => true);
           const mine = input.readAny();
           const tooting = mine.fart || net.inputs.some((x) => x && x.fart);
           const botIn = G.bots.read(raft, dt, G.trackTime, occupied, tooting);
@@ -416,6 +416,6 @@ requestAnimationFrame(frame);
 
 // preview scene behind the title so the page is never empty
 (function preview() {
-  const { level, track, raft } = loadLevel(0, [true, true, true, true]);
+  const { level, track, raft } = loadLevel(0, 4);
   G = { idx: 0, level, online: null, track, raft, bots: new Bots(track), hud: new Hud(raft.players), time: 0, trackTime: 0, phase: 'idle', cd: 0, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false };
 })();

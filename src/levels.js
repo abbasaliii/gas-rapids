@@ -5,13 +5,18 @@
  *   w     : half-width of the channel at the END of the segment (lerped from previous)
  *   f     : features placed along the segment, `at` is a 0..1 fraction of the segment
  *             buoy      { lat }                     spiked mine (lethal), lat is -1..1 of the usable width
- *             lava      { lat }                     lava pool (lethal), same placement
+ *             lava      { lat }                     lava pool (lethal)
+ *             rock      { lat, r }                  boulder in the water (bumps you)
  *             roller    { side, len }               spinning spike bar hinged on the 'L' or 'R' bank, len = fraction of channel width
  *             gate      { gap, gw }                 fence with a gap centred at `gap` (-1..1), gap width gw metres
  *             hammer    { period, phase }           swinging spiked ball across the channel (lethal while low)
+ *             trap      { lat, period, phase }      spikes that pop up out of the water (lethal while up)
+ *             crusher   { period, phase }           two spiked blocks that slide in from the banks (lethal when they touch you)
  *             log       { len, speed, phase }       floating log drifting side to side (bumps you)
  *             whirl     { lat }                     whirlpool: pulls and spins the raft
+ *             twister   { period }                  whirlpool that wanders from bank to bank
  *             geyser    { lat, period, phase }      erupts every `period` s and shoves the raft
+ *             fan       { side, len }               a fan on one bank blows you toward the other for `len` metres
  *             can       { lat }                     can of beans: refills everyone's gas
  *             ice       { len }                     slippery water for `len` metres
  *             boost     { len }                     fast current for `len` metres
@@ -44,30 +49,30 @@ export const LEVELS = [
     name: 'First Toots', world: 0, seed: 7, current: 2.2, startW: 10, stars: [58, 73],
     segments: [
       { len: 70, turn: 0, w: 10 },
-      { len: 60, turn: 30, w: 10, f: [{ type: 'can', at: 0.5, lat: 0.3 }] },
+      { len: 60, turn: 30, w: 10, f: [{ type: 'can', at: 0.5, lat: 0.3 }, { type: 'rock', at: 0.8, lat: -0.5, r: 1.4 }] },
       { len: 80, turn: -60, w: 9, f: [{ type: 'buoy', at: 0.5, lat: -0.45 }] },
       { len: 60, turn: 0, w: 9, f: [{ type: 'gate', at: 0.5, gap: 0.4, gw: 8 }, { type: 'can', at: 0.9, lat: -0.3 }] },
       { len: 50, turn: 45, w: 9, f: [{ type: 'checkpoint', at: 0.3 }] },
-      { len: 70, turn: -45, w: 9, f: [{ type: 'buoy', at: 0.4, lat: 0.5 }, { type: 'buoy', at: 0.8, lat: -0.5 }] },
+      { len: 70, turn: -45, w: 9, f: [{ type: 'buoy', at: 0.4, lat: 0.5 }, { type: 'rock', at: 0.65, lat: 0, r: 1.3 }, { type: 'buoy', at: 0.85, lat: -0.5 }] },
       { len: 60, turn: 0, w: 9, f: [{ type: 'log', at: 0.5, len: 5, speed: 1 }] },
-      { len: 50, turn: 0, w: 10, f: [{ type: 'can', at: 0.3, lat: 0 }] },
+      { len: 50, turn: 0, w: 10, f: [{ type: 'can', at: 0.3, lat: 0 }, { type: 'trap', at: 0.7, lat: 0, period: 4 }] },
       { len: 60, turn: 0, w: 10, f: [{ type: 'finish', at: 0.7 }] },
     ],
   },
   {
     name: 'Monkey Bends', world: 0, seed: 11, current: 2.4, startW: 9, stars: [76, 95],
     segments: [
-      { len: 60, turn: 0, w: 9 },
-      { len: 70, turn: 70, w: 8, f: [{ type: 'spikes', side: 'R' }, { type: 'can', at: 0.5, lat: 0.3 }] },
+      { len: 60, turn: 0, w: 9, f: [{ type: 'rock', at: 0.4, lat: 0.5, r: 1.5 }, { type: 'trap', at: 0.8, lat: 0, period: 3.6 }] },
+      { len: 70, turn: 70, w: 8, f: [{ type: 'spikes', side: 'R' }, { type: 'can', at: 0.5, lat: 0.3 }, { type: 'trap', at: 0.8, lat: -0.4, period: 3.6 }] },
       { len: 70, turn: -70, w: 8, f: [{ type: 'spikes', side: 'L' }, { type: 'buoy', at: 0.5, lat: -0.45 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'roller', at: 0.5, side: 'L', len: 0.35 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
-      { len: 80, turn: -110, w: 8, f: [{ type: 'boost', at: 0.1, len: 50 }, { type: 'spikes', side: 'B' }] },
+      { len: 80, turn: -110, w: 8, f: [{ type: 'boost', at: 0.1, len: 50 }, { type: 'spikes', side: 'B' }, { type: 'rock', at: 0.6, lat: 0.6, r: 1.4 }] },
       { len: 60, turn: 0, w: 8, f: [{ type: 'log', at: 0.3, len: 5, speed: 1.4 }, { type: 'log', at: 0.7, len: 5, speed: 1.1, phase: 2 }] },
       { len: 50, turn: 40, w: 8, f: [{ type: 'whirl', at: 0.5, lat: 0 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'roller', at: 0.3, side: 'R', len: 0.35 }, { type: 'roller', at: 0.75, side: 'L', len: 0.35 }] },
       { len: 40, turn: 0, w: 9, f: [{ type: 'checkpoint', at: 0.5 }] },
-      { len: 70, turn: -40, w: 8, f: [{ type: 'buoy', at: 0.3, lat: 0.55 }, { type: 'buoy', at: 0.7, lat: -0.55 }, { type: 'can', at: 0.5, lat: 0 }] },
+      { len: 70, turn: -40, w: 8, f: [{ type: 'buoy', at: 0.3, lat: 0.55 }, { type: 'buoy', at: 0.65, lat: -0.55 }, { type: 'can', at: 0.9, lat: 0 }] },
       { len: 60, turn: 0, w: 9, f: [{ type: 'finish', at: 0.7 }] },
     ],
   },
@@ -75,16 +80,16 @@ export const LEVELS = [
   {
     name: 'Red Rock Run', world: 1, seed: 23, current: 3.2, startW: 9, stars: [78, 98],
     segments: [
-      { len: 60, turn: 0, w: 9 },
-      { len: 70, turn: -60, w: 8, f: [{ type: 'spikes', side: 'L' }] },
+      { len: 60, turn: 0, w: 9, f: [{ type: 'rock', at: 0.6, lat: -0.4, r: 1.6 }] },
+      { len: 70, turn: -60, w: 8, f: [{ type: 'spikes', side: 'L' }, { type: 'fan', at: 0.2, side: 'L', len: 40 }] },
       { len: 60, turn: 0, w: 8, f: [{ type: 'hammer', at: 0.5, period: 3.4 }] },
-      { len: 70, turn: 60, w: 7, f: [{ type: 'buoy', at: 0.5, lat: 0.65 }, { type: 'can', at: 0.3, lat: -0.4 }] },
+      { len: 70, turn: 60, w: 7, f: [{ type: 'buoy', at: 0.5, lat: 0.65 }, { type: 'can', at: 0.3, lat: -0.4 }, { type: 'trap', at: 0.8, lat: -0.3, period: 3.4 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
-      { len: 110, turn: 150, w: 7, f: [{ type: 'boost', at: 0.05, len: 90 }, { type: 'spikes', side: 'B' }] },
+      { len: 110, turn: 150, w: 7, f: [{ type: 'boost', at: 0.05, len: 90 }, { type: 'spikes', side: 'B' }, { type: 'rock', at: 0.5, lat: -0.5, r: 1.4 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'hammer', at: 0.3, period: 3.2 }, { type: 'hammer', at: 0.7, period: 3.2 }] },
-      { len: 50, turn: -40, w: 8, f: [{ type: 'whirl', at: 0.5, lat: 0.3 }] },
+      { len: 50, turn: -40, w: 8, f: [{ type: 'crusher', at: 0.5, period: 4 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
-      { len: 90, turn: -120, w: 7, f: [{ type: 'boost', at: 0.1, len: 70 }] },
+      { len: 90, turn: -120, w: 7, f: [{ type: 'boost', at: 0.1, len: 70 }, { type: 'fan', at: 0.4, side: 'R', len: 40 }] },
       { len: 60, turn: 40, w: 7, f: [{ type: 'buoy', at: 0.4, lat: 0.65 }, { type: 'buoy', at: 0.8, lat: -0.65 }] },
       { len: 70, turn: 0, w: 9, f: [{ type: 'roller', at: 0.25, side: 'R', len: 0.42 }, { type: 'finish', at: 0.8 }] },
     ],
@@ -93,16 +98,16 @@ export const LEVELS = [
     name: 'Dust Devil', world: 1, seed: 31, current: 3.0, startW: 9, stars: [75, 94],
     segments: [
       { len: 60, turn: 0, w: 9 },
-      { len: 60, turn: 45, w: 8, f: [{ type: 'geyser', at: 0.5, lat: 0, period: 4 }] },
-      { len: 60, turn: -90, w: 7, f: [{ type: 'spikes', side: 'R' }, { type: 'whirl', at: 0.5, lat: -0.2 }] },
+      { len: 60, turn: 45, w: 8, f: [{ type: 'geyser', at: 0.5, lat: 0, period: 4 }, { type: 'rock', at: 0.8, lat: 0.6, r: 1.3 }] },
+      { len: 60, turn: -90, w: 7, f: [{ type: 'spikes', side: 'R' }, { type: 'twister', at: 0.5, period: 6 }] },
       { len: 50, turn: 0, w: 7, f: [{ type: 'gate', at: 0.3, gap: 0.5, gw: 7 }, { type: 'gate', at: 0.8, gap: -0.5, gw: 7 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
       { len: 70, turn: 90, w: 7, f: [{ type: 'geyser', at: 0.3, lat: 0.4, period: 3.5 }, { type: 'geyser', at: 0.7, lat: -0.4, period: 3.5, phase: 1.7 }, { type: 'can', at: 0.5, lat: 0 }] },
-      { len: 80, turn: -130, w: 7, f: [{ type: 'boost', at: 0.1, len: 60 }, { type: 'spikes', side: 'B' }] },
-      { len: 60, turn: 0, w: 7, f: [{ type: 'whirl', at: 0.3, lat: 0.3 }, { type: 'whirl', at: 0.7, lat: -0.3 }] },
+      { len: 80, turn: -130, w: 7, f: [{ type: 'boost', at: 0.1, len: 60 }, { type: 'spikes', side: 'B' }, { type: 'fan', at: 0.5, side: 'L', len: 30 }] },
+      { len: 60, turn: 0, w: 7, f: [{ type: 'trap', at: 0.25, lat: 0.4, period: 3.2 }, { type: 'trap', at: 0.5, lat: -0.4, period: 3.2, phase: 1.6 }, { type: 'trap', at: 0.75, lat: 0.4, period: 3.2 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
       { len: 60, turn: 30, w: 7, f: [{ type: 'hammer', at: 0.5, period: 3.2 }] },
-      { len: 60, turn: -30, w: 7, f: [{ type: 'log', at: 0.5, len: 6, speed: 1.5 }] },
+      { len: 60, turn: -30, w: 7, f: [{ type: 'log', at: 0.4, len: 6, speed: 1.5 }, { type: 'crusher', at: 0.8, period: 3.8 }] },
       { len: 70, turn: 0, w: 9, f: [{ type: 'finish', at: 0.8 }] },
     ],
   },
@@ -110,33 +115,34 @@ export const LEVELS = [
   {
     name: 'Slippery Slopes', world: 2, seed: 41, current: 2.6, startW: 9, stars: [74, 93],
     segments: [
-      { len: 60, turn: 0, w: 9 },
-      { len: 70, turn: -50, w: 8, f: [{ type: 'ice', at: 0.1, len: 60 }, { type: 'can', at: 0.5, lat: 0.3 }] },
+      { len: 60, turn: 0, w: 9, f: [{ type: 'rock', at: 0.7, lat: 0.4, r: 1.5 }] },
+      { len: 70, turn: -50, w: 8, f: [{ type: 'ice', at: 0.1, len: 60 }, { type: 'can', at: 0.5, lat: 0.3 }, { type: 'rock', at: 0.8, lat: -0.5, r: 1.4 }] },
       { len: 60, turn: 50, w: 8, f: [{ type: 'log', at: 0.5, len: 5, speed: 1.2 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'roller', at: 0.5, side: 'L', len: 0.35 }, { type: 'ice', at: 0, len: 60 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
-      { len: 90, turn: 120, w: 7, f: [{ type: 'ice', at: 0, len: 90 }, { type: 'spikes', side: 'B' }] },
-      { len: 60, turn: 0, w: 7, f: [{ type: 'buoy', at: 0.3, lat: 0.6 }, { type: 'buoy', at: 0.7, lat: -0.6 }] },
+      { len: 90, turn: 120, w: 7, f: [{ type: 'ice', at: 0, len: 90 }, { type: 'spikes', side: 'B' }, { type: 'fan', at: 0.3, side: 'R', len: 40 }] },
+      { len: 60, turn: 0, w: 7, f: [{ type: 'trap', at: 0.2, lat: 0, period: 3.4 }, { type: 'buoy', at: 0.55, lat: 0.6 }, { type: 'buoy', at: 0.85, lat: -0.6 }] },
       { len: 60, turn: -60, w: 7, f: [{ type: 'hammer', at: 0.5, period: 3.2 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
-      { len: 70, turn: -60, w: 7, f: [{ type: 'ice', at: 0, len: 70 }, { type: 'whirl', at: 0.5, lat: 0 }] },
+      { len: 70, turn: -60, w: 7, f: [{ type: 'ice', at: 0, len: 70 }, { type: 'twister', at: 0.5, period: 7 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'gate', at: 0.4, gap: 0.5, gw: 7 }, { type: 'log', at: 0.8, len: 5, speed: 1.6 }] },
-      { len: 70, turn: 0, w: 9, f: [{ type: 'finish', at: 0.8 }] },
+      { len: 70, turn: 0, w: 9, f: [{ type: 'crusher', at: 0.3, period: 3.8 }, { type: 'finish', at: 0.8 }] },
     ],
   },
   {
     name: 'Frozen Falls', world: 2, seed: 47, current: 2.8, startW: 9, stars: [75, 94],
     segments: [
       { len: 60, turn: 0, w: 9 },
-      { len: 70, turn: 70, w: 8, f: [{ type: 'ice', at: 0, len: 70 }, { type: 'geyser', at: 0.5, lat: 0.3, period: 4 }] },
+      { len: 70, turn: 70, w: 8, f: [{ type: 'ice', at: 0, len: 70 }, { type: 'geyser', at: 0.5, lat: 0.3, period: 4 }, { type: 'rock', at: 0.8, lat: -0.5, r: 1.4 }] },
       { len: 60, turn: -70, w: 7, f: [{ type: 'log', at: 0.3, len: 5, speed: 1.3 }, { type: 'log', at: 0.7, len: 5, speed: 1.3, phase: 2 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'hammer', at: 0.5, period: 3.2 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
-      { len: 100, turn: -140, w: 7, f: [{ type: 'ice', at: 0, len: 100 }, { type: 'spikes', side: 'B' }] },
+      { len: 100, turn: -140, w: 7, f: [{ type: 'ice', at: 0, len: 100 }, { type: 'spikes', side: 'B' }, { type: 'rock', at: 0.5, lat: 0.4, r: 1.4 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'roller', at: 0.3, side: 'R', len: 0.35 }, { type: 'roller', at: 0.75, side: 'L', len: 0.35 }] },
-      { len: 60, turn: 40, w: 7, f: [{ type: 'whirl', at: 0.5, lat: 0.2 }, { type: 'can', at: 0.2, lat: -0.4 }] },
+      { len: 60, turn: 40, w: 7, f: [{ type: 'whirl', at: 0.5, lat: 0.2 }, { type: 'can', at: 0.2, lat: -0.4 }, { type: 'fan', at: 0.6, side: 'L', len: 25 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
       { len: 70, turn: -40, w: 7, f: [{ type: 'buoy', at: 0.3, lat: 0.5 }, { type: 'buoy', at: 0.6, lat: -0.5 }, { type: 'buoy', at: 0.9, lat: 0.5 }] },
+      { len: 60, turn: 0, w: 7, f: [{ type: 'crusher', at: 0.3, period: 3.6 }, { type: 'crusher', at: 0.75, period: 3.6, phase: 1.8 }] },
       { len: 70, turn: 0, w: 9, f: [{ type: 'finish', at: 0.8 }] },
     ],
   },
@@ -144,34 +150,35 @@ export const LEVELS = [
   {
     name: 'Magma Mouth', world: 3, seed: 59, current: 3.0, startW: 9, stars: [75, 94],
     segments: [
-      { len: 60, turn: 0, w: 9 },
-      { len: 70, turn: -45, w: 8, f: [{ type: 'lava', at: 0.5, lat: 0.75 }] },
-      { len: 60, turn: 45, w: 8, f: [{ type: 'lava', at: 0.3, lat: -0.75 }, { type: 'lava', at: 0.7, lat: 0.75 }, { type: 'can', at: 0.5, lat: 0 }] },
+      { len: 60, turn: 0, w: 9, f: [{ type: 'rock', at: 0.7, lat: 0.5, r: 1.5 }] },
+      { len: 70, turn: -45, w: 8, f: [{ type: 'lava', at: 0.5, lat: 0.7 }, { type: 'trap', at: 0.8, lat: -0.2, period: 3.4 }] },
+      { len: 60, turn: 45, w: 8, f: [{ type: 'lava', at: 0.3, lat: -0.7 }, { type: 'lava', at: 0.7, lat: 0.7 }, { type: 'can', at: 0.5, lat: 0 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'geyser', at: 0.5, lat: 0, period: 3.5 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
-      { len: 90, turn: 120, w: 7, f: [{ type: 'boost', at: 0.1, len: 70 }, { type: 'spikes', side: 'B' }, { type: 'lava', at: 0.5, lat: -0.8 }] },
+      { len: 90, turn: 120, w: 7, f: [{ type: 'boost', at: 0.1, len: 70 }, { type: 'spikes', side: 'B' }, { type: 'lava', at: 0.5, lat: -0.8 }, { type: 'fan', at: 0.6, side: 'R', len: 30 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'hammer', at: 0.3, period: 3.2 }, { type: 'hammer', at: 0.7, period: 3.2 }] },
-      { len: 60, turn: -60, w: 7, f: [{ type: 'whirl', at: 0.5, lat: -0.2 }, { type: 'lava', at: 0.5, lat: 0.8 }] },
+      { len: 60, turn: -60, w: 7, f: [{ type: 'twister', at: 0.5, period: 6 }, { type: 'lava', at: 0.5, lat: 0.8 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
       { len: 60, turn: 60, w: 7, f: [{ type: 'roller', at: 0.5, side: 'L', len: 0.35 }] },
-      { len: 60, turn: 0, w: 7, f: [{ type: 'geyser', at: 0.3, lat: 0.4, period: 3.2 }, { type: 'geyser', at: 0.7, lat: -0.4, period: 3.2, phase: 1.6 }] },
+      { len: 60, turn: 0, w: 7, f: [{ type: 'geyser', at: 0.3, lat: 0.4, period: 3 }, { type: 'crusher', at: 0.6, period: 3.8 }, { type: 'geyser', at: 0.85, lat: -0.4, period: 3, phase: 1.5 }] },
       { len: 70, turn: 0, w: 9, f: [{ type: 'finish', at: 0.8 }] },
     ],
   },
   {
     name: 'Eruption Run', world: 3, seed: 67, current: 3.2, startW: 9, stars: [89, 111],
     segments: [
-      { len: 60, turn: 0, w: 9 },
-      { len: 60, turn: 30, w: 7, f: [{ type: 'geyser', at: 0.5, lat: 0.3, period: 3.2 }, { type: 'lava', at: 0.8, lat: -0.8 }] },
-      { len: 70, turn: -90, w: 7, f: [{ type: 'spikes', side: 'B' }, { type: 'hammer', at: 0.5, period: 3.2 }] },
-      { len: 50, turn: 0, w: 7, f: [{ type: 'gate', at: 0.3, gap: -0.5, gw: 7 }, { type: 'gate', at: 0.75, gap: 0.5, gw: 7 }] },
+      { len: 60, turn: 0, w: 9, f: [{ type: 'rock', at: 0.6, lat: -0.4, r: 1.5 }] },
+      { len: 60, turn: 30, w: 7, f: [{ type: 'geyser', at: 0.5, lat: 0.3, period: 2.8 }, { type: 'lava', at: 0.8, lat: -0.8 }] },
+      { len: 70, turn: -90, w: 7, f: [{ type: 'spikes', side: 'B' }, { type: 'hammer', at: 0.5, period: 3.2 }, { type: 'fan', at: 0.7, side: 'L', len: 25 }] },
+      { len: 50, turn: 0, w: 7, f: [{ type: 'gate', at: 0.3, gap: -0.5, gw: 7 }, { type: 'trap', at: 0.55, lat: 0, period: 3.2 }, { type: 'gate', at: 0.8, gap: 0.5, gw: 7 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }, { type: 'can', at: 0.9, lat: 0 }] },
       { len: 100, turn: 150, w: 7, f: [{ type: 'boost', at: 0.05, len: 85 }, { type: 'spikes', side: 'B' }, { type: 'lava', at: 0.35, lat: -0.8 }, { type: 'can', at: 0.65, lat: 0.5 }] },
       { len: 60, turn: 0, w: 7, f: [{ type: 'roller', at: 0.3, side: 'R', len: 0.35 }, { type: 'roller', at: 0.75, side: 'L', len: 0.35 }] },
-      { len: 60, turn: -45, w: 7, f: [{ type: 'whirl', at: 0.3, lat: 0.3 }, { type: 'geyser', at: 0.7, lat: -0.2, period: 3.2 }] },
+      { len: 60, turn: -45, w: 7, f: [{ type: 'twister', at: 0.3, period: 5.5 }, { type: 'geyser', at: 0.75, lat: -0.2, period: 3 }] },
       { len: 40, turn: 0, w: 8, f: [{ type: 'checkpoint', at: 0.5 }] },
       { len: 70, turn: -60, w: 7, f: [{ type: 'hammer', at: 0.3, period: 3.2 }, { type: 'hammer', at: 0.64, period: 3.2 }] },
       { len: 60, turn: 30, w: 7, f: [{ type: 'buoy', at: 0.3, lat: 0.5 }, { type: 'buoy', at: 0.6, lat: -0.5 }, { type: 'buoy', at: 0.9, lat: 0.5 }] },
+      { len: 60, turn: 0, w: 7, f: [{ type: 'crusher', at: 0.3, period: 3.4 }, { type: 'trap', at: 0.6, lat: 0.3, period: 3 }, { type: 'trap', at: 0.8, lat: -0.3, period: 3, phase: 1.5 }] },
       { len: 70, turn: 0, w: 9, f: [{ type: 'finish', at: 0.8 }] },
     ],
   },

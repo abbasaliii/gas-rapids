@@ -9,10 +9,10 @@ Everything here is original and free to use commercially: code, art (built from 
 ## The game
 
 - **8 levels in 4 worlds**: Jungle, Canyon, Frostbite, Volcano. Levels unlock in order. Each has gold, silver and bronze times, a best time, and stars on the level-select screen.
-- **1 to 4 players** on one keyboard: pick the count on the level screen. Seats nobody takes can be crewed by bots (they drive, steer and brake at hammers, but push harder when a human is tooting) or left empty for the raw, harder, original-style raft.
+- **1 to 4 players** on one keyboard: pick the count on the level screen and exactly that many animals sit on the raft. One sits at the back; two sit back-left and back-right; three form a triangle; four take all sides. Fewer toot-ers means less steering and no way to brake, so it gets harder. Tick "Add crew bots" if you want a full crew of four with bots in the spare seats (they drive, steer and time the hammers, traps and crushers for you).
 - **Crew**: Stinky the skunk (back seat), Porkchop the pig (right), Ribbit the frog (front), Blubber the seal (left).
 - **Feel**: every jet leaves slightly off-centre and sputters, the raft spins when hit and only weakly straightens itself, so coordination and timing matter. Tap for a punchy pop, hold for thrust.
-- **Hazards**: spiked buoys, lava pools, spinning spike rollers, fences with gaps, swinging spiked hammers, drifting logs, whirlpools, erupting geysers, ice (slippery), boost currents, spiked rails.
+- **Hazards**: spiked buoys, lava pools, boulders, spinning spike rollers, fences with gaps, swinging spiked hammers, pop-up spike traps, crusher blocks, drifting logs, whirlpools, wandering twisters, erupting geysers, bank fans that blow you sideways, ice (slippery), boost currents, spiked rails.
 - **Beans**: cans of beans refill the whole crew's gas. The HUD counts them.
 - **Gas**: tap for a short pop, hold for sustained thrust. Run the bar to zero and you sputter until it recovers.
 
