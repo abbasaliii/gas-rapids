@@ -5,9 +5,14 @@
  * The only outside service is the free PeerJS broker, used once to introduce peers to each other.
  */
 import Peer from 'peerjs';
+export { Peer };
 
 const PREFIX = 'gasrapids-v1-';
 const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
+// Our own broker (server/ folder, Cloudflare Worker). Set VITE_PEER_HOST in .env; without it the public PeerJS broker is used.
+const BROKER = import.meta.env.VITE_PEER_HOST
+  ? { host: import.meta.env.VITE_PEER_HOST, port: 443, secure: true, path: '/', key: 'peerjs' }
+  : {};
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const makeCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
@@ -28,7 +33,8 @@ export class Net {
 
   _peer(id) {
     return new Promise((resolve, reject) => {
-      const p = id ? new Peer(id, { config: ICE }) : new Peer({ config: ICE });
+      const opts = { ...BROKER, config: ICE };
+      const p = id ? new Peer(id, opts) : new Peer(opts);
       p.on('open', () => resolve(p));
       p.on('error', (e) => { this.emit('error', e); reject(e); });
       p.on('disconnected', () => { try { p.reconnect(); } catch {} });

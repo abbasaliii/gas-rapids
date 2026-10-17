@@ -42,16 +42,24 @@ The `localhost` address only works on your own computer. To play with friends th
 
 ## Deploy for free
 
-**GitHub Pages (recommended, permanent, HTTPS, zero cost)**
+Two hosts are set up. Both cost nothing.
+
+**Cloudflare Pages + your own broker (use this one, commercial use is allowed)**
 
 ```bash
-git init && git add -A && git commit -m "Gas Rapids"
-gh repo create gas-rapids --public --source=. --push      # or create the repo on github.com and push
+npx wrangler login          # once, opens the browser; a free Cloudflare account is enough, no card
+npm run deploy              # deploys the broker worker, then builds and deploys the site
 ```
 
-Then in the repo: Settings → Pages → Source: **GitHub Actions**. The workflow in `.github/workflows/pages.yml` builds and publishes on every push. Your game lives at `https://<your-user>.github.io/gas-rapids/`. Share that link; the party invite links are built from it automatically.
+The first `deploy:broker` prints the worker URL, for example `gas-rapids-broker.<you>.workers.dev`. Put that host in `.env` as `VITE_PEER_HOST=` (see `.env.example`) so the game uses your broker instead of the public one, then run `npm run deploy:web`. The site is at `https://gas-rapids.pages.dev`.
 
-**Other free options:** Netlify Drop or Cloudflare Pages (drag the `dist/` folder after `npm run build`), or itch.io (zip `dist/` and upload as an HTML game).
+The broker in `server/` is a 90-line Cloudflare Worker that speaks the PeerJS signaling protocol. It only relays the connection handshake; game data and voice never touch it, so the free plan's limits are nowhere near.
+
+**GitHub Pages (fallback, non-commercial)**
+
+The workflow in `.github/workflows/pages.yml` publishes every push to `main` at `https://abbasaliii.github.io/gas-rapids/`.
+
+**Also free:** itch.io (zip `dist/` and upload as an HTML game, lets you charge for it), Netlify.
 
 **Play right now without deploying:** run `npm run dev`, then expose it with a free tunnel such as `winget install Cloudflare.cloudflared` + `cloudflared tunnel --url http://localhost:5173`. The tunnel prints a temporary public HTTPS link that works while your PC is on.
 

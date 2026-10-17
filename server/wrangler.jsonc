@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gas-rapids-broker",
+  "main": "src/index.js",
+  "compatibility_date": "2026-01-01",
+  "durable_objects": {
+    "bindings": [{ "name": "BROKER", "class_name": "Broker" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Broker"] }]
+}
