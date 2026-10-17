@@ -30,17 +30,17 @@ The streamer's audio is mostly laughing and shouting ("go for it", "let's calm i
 
 Why web instead of Godot: it runs instantly from a link, needs no install, can be tested headlessly, and it fits the existing skill set here. Godot 4 (MIT) is the right call only if a Steam build becomes the goal. Steam Direct charges a one-off fee, so Steam is the only step on any path that is not free. Unity and Unreal were ruled out because their licences are not "free, no strings" for a commercial release.
 
-## How this version matches and improves on the original
+## How this version compares with the original
 
 Matches: one button per seat, thrust from the seat position, four animals on a round raft, gas meter, pop vs hold, checkpoints and retries, chase camera, spiked buoys, rollers, fences, boosts, pink spike rails, START and CHECKPOINT arches, chequered finish.
 
-Improvements already in: bots fill empty seats so it is playable solo, aimable jets give each seat real steering, touch and gamepad support, best-time per level, instant load with no install.
+Beyond the original: a level ladder (8 levels, 4 worlds) with star ratings and unlocks instead of one long course; crew bots so it plays solo; hazards the original does not have (swinging hammers, whirlpools, geysers, drifting logs, lava, ice); bean pickups; online parties with voice; instant load with no install.
 
-Not yet matched: online multiplayer, the original's character models and animations, spiral tubes and half-pipe slides, competitive 8-player mode.
+Not yet matched: the original's hand-made character models, spiral tubes and half-pipe slides, competitive 8-player mode.
 
 ## Legal note
 
-Game mechanics are not protected, so recreating "fart-propelled raft co-op" is fine. The name "Fart Together", its logo, its models, textures, sounds and levels are the developer's property and must not be copied, which is why this project is named Gas Rapids and generates all of its own art and audio.
+Game mechanics are not protected, so recreating "fart-propelled raft co-op" is fine. The name "Fart Together", its logo, its models, textures, sounds and levels are the developer's property and must not be copied, which is why this project (now Toot River) has its own name, its own animals (skunk, pig, frog, seal), and generates all of its own art and audio.
 
 ## Studying the original for free
 

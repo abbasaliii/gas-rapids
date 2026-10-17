@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { LEVELS } from './levels.js';
+import { LEVELS, WORLDS } from './levels.js';
 import { buildTrack } from './track.js';
 import { Raft } from './raft.js';
 import { Effects } from './effects.js';
@@ -19,13 +19,14 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(58, 1, 0.5, 400);
+const camera = new THREE.PerspectiveCamera(58, 1, 0.5, 420);
 const sun = new THREE.DirectionalLight(0xffffff, 2.2);
 sun.position.set(30, 60, 20); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 });
 scene.add(sun, sun.target);
-scene.add(new THREE.HemisphereLight(0xcfeaff, 0x6b8e3a, 1.4));
+const hemi = new THREE.HemisphereLight(0xcfeaff, 0x6b8e3a, 1.4);
+scene.add(hemi);
 const effects = new Effects(scene);
 const audio = new Audio();
 const input = new Input();
@@ -42,20 +43,47 @@ addEventListener('resize', resize); resize();
 // ---------------------------------------------------------------- ui
 const $ = (id) => document.getElementById(id);
 const ui = {
-  title: $('title'), finish: $('finish'), seats: $('seats'), start: $('start'), again: $('again'), menu: $('menu'),
-  sound: $('opt-sound'), bots: $('opt-bots'), level: $('opt-level'),
-  fTime: $('f-time'), fSub: $('f-sub'), fBest: $('f-best'), fWait: $('f-wait'),
-  online: $('online'), party: $('party'), setup: $('party-setup'), lobby: $('party-lobby'), pname: $('pname'), pcode: $('pcode'),
-  host: $('host'), join: $('join'), partyErr: $('party-error'), partyBack: $('party-back'), codeOut: $('code-out'), invite: $('invite-link'),
-  copy: $('copy'), lobbySeats: $('lobby-seats'), lobbyLevel: $('lobby-level'), lobbyLevelWrap: $('lobby-level-wrap'), mic: $('mic'), micHud: $('mic-hud'),
-  lobbyStatus: $('lobby-status'), lobbyStart: $('lobby-start'), leave: $('leave'),
+  title: $('title'), levels: $('levels'), finish: $('finish'), party: $('party'), seats: $('seats'), worlds: $('worlds'),
+  play: $('play'), online: $('online'), sound: $('opt-sound'), music: $('opt-music'), levelsBack: $('levels-back'),
+  fTime: $('f-time'), fSub: $('f-sub'), fBest: $('f-best'), fWait: $('f-wait'), stars: $('stars'), next: $('next'), again: $('again'), menu: $('menu'),
+  setup: $('party-setup'), lobby: $('party-lobby'), pname: $('pname'), pcode: $('pcode'), host: $('host'), join: $('join'), partyErr: $('party-error'),
+  partyBack: $('party-back'), codeOut: $('code-out'), invite: $('invite-link'), copy: $('copy'), lobbySeats: $('lobby-seats'), lobbyLevel: $('lobby-level'),
+  lobbyLevelWrap: $('lobby-level-wrap'), mic: $('mic'), micHud: $('mic-hud'), lobbyStatus: $('lobby-status'), lobbyStart: $('lobby-start'), leave: $('leave'),
 };
 let G = null;       // current game
-let mode = 'title'; // title | party | game | finish
+let mode = 'title'; // title | levels | party | game | finish
 let clock = 0;
+let selectedLevel = 0;
 
-function show(screen) {
-  for (const s of [ui.title, ui.party, ui.finish]) s.hidden = s !== screen;
+function show(screen) { for (const s of [ui.title, ui.levels, ui.party, ui.finish]) s.hidden = s !== screen; }
+
+// ---------------------------------------------------------------- progression
+const PROG_KEY = 'tootriver-progress';
+let prog = {};
+try { prog = JSON.parse(localStorage.getItem(PROG_KEY) || '{}') || {}; } catch { prog = {}; }
+const saveProg = () => { try { localStorage.setItem(PROG_KEY, JSON.stringify(prog)); } catch {} };
+const unlocked = (i) => i === 0 || !!(prog[i - 1] && prog[i - 1].stars >= 1) || !!(prog[i] && prog[i].best);
+const starsFor = (level, time) => (time <= level.stars[0] ? 3 : time <= level.stars[1] ? 2 : 1);
+
+function renderLevels() {
+  ui.worlds.innerHTML = WORLDS.map((w, wi) => {
+    const cards = LEVELS.map((l, i) => ({ l, i })).filter(({ l }) => l.world === wi).map(({ l, i }) => {
+      const p = prog[i] || {}, lock = !unlocked(i);
+      const stars = [1, 2, 3].map((n) => `<b${(p.stars || 0) >= n ? '' : ' class="off"'}>${(p.stars || 0) >= n ? '★' : '☆'}</b>`).join('');
+      return `<div class="level ${lock ? 'locked' : ''}" data-i="${i}" style="--w:${w.color}">
+        <div class="n">${i + 1}. ${l.name}</div>
+        <div class="s">${stars}</div>
+        <div class="t">${p.best ? 'Best ' + fmtTime(p.best) : 'Not finished yet'} · gold under ${l.stars[0]}s</div>
+        ${lock ? '<div class="lock">🔒</div>' : ''}</div>`;
+    }).join('');
+    return `<div class="world" style="--w:${w.color}"><h2>${w.icon} ${w.name}<span>${LEVELS.filter((l) => l.world === wi).length} levels</span></h2>${cards}</div>`;
+  }).join('');
+  ui.worlds.querySelectorAll('.level').forEach((el) => el.addEventListener('click', () => {
+    const i = +el.dataset.i;
+    if (!unlocked(i)) { el.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'none' }], { duration: 220 }); return; }
+    selectedLevel = i; startGame();
+  }));
+  renderSeats();
 }
 
 function renderSeats() {
@@ -63,90 +91,106 @@ function renderSeats() {
     <div class="seat ${input.claimed[i] ? 'human' : ''}" style="--c:${r.color}">
       <div class="face">${r.emoji}</div>
       <div class="who">${r.name}</div>
-      <div class="role">${input.claimed[i] ? 'YOU' : ui.bots.checked ? 'BOT' : 'empty'}</div>
+      <div class="role">${input.claimed[i] ? 'YOU' : 'CREW BOT'}</div>
       <kbd>${KEYMAP[i].label}</kbd>
     </div>`).join('');
 }
-input.onClaim(() => { if (mode === 'title') renderSeats(); if (G && !G.online) G.hud.setRoles(localRoles()); });
-ui.bots.addEventListener('change', renderSeats);
-renderSeats();
-const localRoles = () => input.claimed.map((c) => c || !ui.bots.checked);
+input.onClaim(() => { if (mode === 'levels') renderSeats(); if (G && !G.online && mode === 'game') G.hud.setRoles(localRoles()); });
+const localRoles = () => input.claimed.map(Boolean);
 
 // ---------------------------------------------------------------- game setup
-function startGame(opts = {}) {
-  audio.init(); audio.setEnabled(ui.sound.checked);
+function loadLevel(idx) {
   if (G) scene.remove(G.track.group, G.raft.mesh);
-  const online = opts.online || null; // 'host' | 'client' | null
-  const levelIdx = online ? net.level : +ui.level.value;
-  const level = LEVELS[levelIdx];
+  const level = LEVELS[idx];
   const track = buildTrack(level);
   scene.add(track.group);
-  scene.background = new THREE.Color(level.theme.fog);
-  scene.fog = new THREE.Fog(level.theme.fog, 90, 260);
+  scene.background = new THREE.Color(level.theme.sky);
+  scene.fog = new THREE.Fog(level.theme.fog, 90, 280);
+  hemi.groundColor.set(level.theme.bankTop);
   const raft = new Raft(track, effects, audio);
   scene.add(raft.mesh);
+  return { level, track, raft };
+}
+
+function startGame(opts = {}) {
+  audio.init(); audio.setEnabled(ui.sound.checked); audio.setMusic(ui.music.checked);
+  const online = opts.online || null; // 'host' | 'client' | null
+  const idx = online ? net.level : selectedLevel;
+  const { level, track, raft } = loadLevel(idx);
   if (online) raft.players.forEach((p, i) => { p.name = net.seats[i] ? net.seats[i].name : p.name; });
   const hud = new Hud(raft.players);
   hud.setTicks(track.checkpoints, track.length);
   hud.show(true);
-  G = { level, online, track, raft, bots: new Bots(track), hud, time: 0, phase: online === 'client' ? 'client' : 'countdown', cd: 3.9, cdShown: null, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false, snap: null, lastSnap: 0 };
-  if (online) {
-    hud.setRoles(net.seats.map((s, i) => (!s ? false : i === net.mySeat ? true : s.name)));
-    ui.micHud.hidden = false;
-  } else {
-    if (!input.claimed.some(Boolean)) input.claim(0); // someone has to be the player
-    hud.setRoles(localRoles());
-    ui.micHud.hidden = true;
-  }
+  G = { idx, level, online, track, raft, bots: new Bots(track), hud, time: 0, trackTime: 0, phase: online === 'client' ? 'client' : 'countdown', cd: 3.9, cdShown: null, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false, snap: null, lastSnap: 0, hintT: 0 };
+  if (online) { hud.setRoles(net.seats.map((s, i) => (!s ? false : i === net.mySeat ? true : s.name))); ui.micHud.hidden = false; }
+  else { if (!input.claimed.some(Boolean)) input.claim(0); hud.setRoles(localRoles()); ui.micHud.hidden = true; }
+  hud.toast(`${idx + 1}. ${level.name.toUpperCase()}`);
+  audio.stopMusic(); audio.startMusic('race');
   show(null);
   mode = 'game';
 }
 
-function showFinish(time, retries, level, isClient) {
+function showFinish(time, retries, isClient) {
+  const { level, idx } = G;
+  const stars = starsFor(level, time);
   ui.fTime.textContent = fmtTime(time);
-  ui.fSub.textContent = `${level.name} · ${retries} ${retries === 1 ? 'retry' : 'retries'}`;
-  try {
-    const key = 'gasrapids-best-' + level.name;
-    const best = +localStorage.getItem(key) || null;
-    if (!best || time < best) { localStorage.setItem(key, time); ui.fBest.textContent = best ? `New best! Previous ${fmtTime(best)}` : 'First finish. That is the time to beat.'; }
-    else ui.fBest.textContent = `Best ${fmtTime(best)}`;
-  } catch { ui.fBest.textContent = ''; }
-  ui.again.hidden = isClient; ui.menu.textContent = G.online ? 'Back to party' : 'Menu'; ui.fWait.hidden = !isClient;
+  ui.fSub.textContent = `${level.name} · ${retries} ${retries === 1 ? 'retry' : 'retries'} · ${G.raft.cans} 🥫`;
+  const p = prog[idx] || {};
+  const newBest = !p.best || time < p.best;
+  if (!isClient) {
+    prog[idx] = { best: newBest ? time : p.best, stars: Math.max(stars, p.stars || 0) };
+    saveProg();
+  }
+  ui.fBest.textContent = newBest ? (p.best ? `New best! Previous ${fmtTime(p.best)}` : 'First finish. That is the time to beat.') : `Best ${fmtTime(p.best)}`;
+  if (stars < 3) ui.fBest.textContent += ` · gold under ${level.stars[0]}s`;
+  const starEls = ui.stars.querySelectorAll('i');
+  starEls.forEach((s) => s.classList.remove('on'));
+  ui.next.hidden = isClient || idx + 1 >= LEVELS.length;
+  ui.again.hidden = isClient;
+  ui.menu.textContent = G.online ? 'Back to party' : 'Levels';
+  ui.fWait.hidden = !isClient;
   show(ui.finish);
   G.hud.show(false);
   mode = 'finish';
+  for (let n = 0; n < stars; n++) setTimeout(() => { starEls[n].classList.add('on'); audio.star(n); }, 350 + n * 280);
 }
 
 function finishGame() {
-  const { raft, level } = G;
-  audio.fanfare();
+  const { raft } = G;
+  audio.fanfare(); audio.stopMusic();
   G.phase = 'finished';
   G.hud.toast('FINISH!');
-  if (G.online === 'host') net.broadcast({ t: 'end', time: G.time, retries: raft.retries });
+  effects.confetti(raft.x, raft.z, 90);
+  if (G.online === 'host') net.broadcast({ t: 'end', time: G.time, retries: raft.retries, cans: raft.cans });
   const game = G;
-  setTimeout(() => { if (G === game) showFinish(G.time, raft.retries, level, false); }, 1600);
+  setTimeout(() => { if (G === game) showFinish(G.time, raft.retries, false); }, 1700);
 }
 
-ui.start.addEventListener('click', () => startGame());
+ui.play.addEventListener('click', () => { audio.init(); show(ui.levels); mode = 'levels'; renderLevels(); });
+ui.levelsBack.addEventListener('click', () => { show(ui.title); mode = 'title'; });
+ui.next.addEventListener('click', () => { selectedLevel = Math.min(LEVELS.length - 1, G.idx + 1); startGame(); });
 ui.again.addEventListener('click', () => { if (G && G.online === 'host') hostStart(); else startGame(); });
 ui.menu.addEventListener('click', () => {
+  audio.stopMusic();
   if (G && G.online) { show(ui.party); mode = 'party'; renderLobby(); }
-  else { show(ui.title); mode = 'title'; renderSeats(); }
+  else { show(ui.levels); mode = 'levels'; renderLevels(); }
   if (G) G.hud.show(false);
 });
 ui.sound.addEventListener('change', () => audio.setEnabled(ui.sound.checked));
+ui.music.addEventListener('change', () => audio.setMusic(ui.music.checked));
 addEventListener('keydown', (e) => {
-  if (e.target && e.target.tagName === 'INPUT') return;
-  if (mode === 'title' && e.code === 'Space') startGame();
-  if (mode === 'finish' && e.code === 'Space' && !(G && G.online === 'client')) ui.again.click();
+  if (e.target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+  if (mode === 'title' && (e.code === 'Space' || e.code === 'Enter')) ui.play.click();
+  if (mode === 'finish' && e.code === 'Space' && !(G && G.online === 'client')) (ui.next.hidden ? ui.again : ui.next).click();
   if (e.code === 'Escape' && mode === 'game') ui.menu.click();
+  if (e.code === 'Escape' && mode === 'levels') ui.levelsBack.click();
   if (e.code === 'KeyM' && net.connected) toggleMic();
 });
 
 // ---------------------------------------------------------------- party
 function partyError(msg) { ui.partyErr.textContent = msg || ''; }
 function inviteUrl(code) { const u = new URL(location.href); u.search = '?room=' + code; return u.toString(); }
-ui.online.addEventListener('click', () => { show(ui.party); ui.setup.hidden = false; ui.lobby.hidden = true; mode = 'party'; partyError(''); ui.pname.focus(); });
+ui.online.addEventListener('click', () => { audio.init(); show(ui.party); ui.setup.hidden = false; ui.lobby.hidden = true; mode = 'party'; partyError(''); ui.pname.focus(); });
 ui.partyBack.addEventListener('click', () => { net.leave(); show(ui.title); mode = 'title'; });
 ui.leave.addEventListener('click', () => { net.leave(); ui.setup.hidden = false; ui.lobby.hidden = true; show(ui.title); mode = 'title'; });
 ui.copy.addEventListener('click', async () => {
@@ -155,10 +199,11 @@ ui.copy.addEventListener('click', async () => {
   setTimeout(() => (ui.copy.textContent = 'Copy invite link'), 1800);
 });
 const myName = () => (ui.pname.value.trim() || 'Player').slice(0, 12);
-try { ui.pname.value = localStorage.getItem('gasrapids-name') || ''; } catch {}
+try { ui.pname.value = localStorage.getItem('tootriver-name') || ''; } catch {}
+ui.lobbyLevel.innerHTML = LEVELS.map((l, i) => `<option value="${i}">${i + 1}. ${l.name} (${WORLDS[l.world].name})</option>`).join('');
 
 async function enterLobby() {
-  try { localStorage.setItem('gasrapids-name', myName()); } catch {}
+  try { localStorage.setItem('tootriver-name', myName()); } catch {}
   ui.setup.hidden = true; ui.lobby.hidden = false;
   ui.codeOut.textContent = net.code; ui.invite.value = inviteUrl(net.code);
   ui.lobbyLevelWrap.style.display = net.role === 'host' ? '' : 'none';
@@ -171,7 +216,7 @@ async function enterLobby() {
 }
 ui.host.addEventListener('click', async () => {
   partyError(''); ui.host.disabled = true;
-  try { audio.init(); await net.host(myName()); await enterLobby(); }
+  try { await net.host(myName()); await enterLobby(); }
   catch (e) { partyError('Could not reach the party service: ' + (e.message || e.type || e)); net.leave(); }
   ui.host.disabled = false;
 });
@@ -179,14 +224,14 @@ ui.join.addEventListener('click', async () => {
   const code = ui.pcode.value.trim().toUpperCase();
   if (code.length < 5) return partyError('Enter the 5-letter party code.');
   partyError(''); ui.join.disabled = true;
-  try { audio.init(); await net.join(code, myName()); await enterLobby(); }
+  try { await net.join(code, myName()); await enterLobby(); }
   catch (e) { partyError(e.message || 'Could not join'); net.leave(); }
   ui.join.disabled = false;
 });
 ui.lobbyLevel.addEventListener('change', () => { if (net.role === 'host') net.setLevel(+ui.lobbyLevel.value); });
 function setMicUi(on) {
-  const label = on === null ? '🎤 Mic blocked' : on ? '🎤 Mic on' : '🔇 Mic off';
-  ui.mic.textContent = label; ui.micHud.textContent = on ? '🎤' : '🔇'; ui.micHud.classList.toggle('off', !on);
+  ui.mic.textContent = on === null ? '🎤 Mic blocked' : on ? '🎤 Mic on' : '🔇 Mic off';
+  ui.micHud.textContent = on ? '🎤' : '🔇'; ui.micHud.classList.toggle('off', !on);
 }
 async function toggleMic() {
   if (!net.voice.stream) { const ok = await net.voice.enable(); setMicUi(ok ? true : null); net.voice.sync(); return; }
@@ -203,12 +248,13 @@ function renderLobby() {
     const talking = s && (mine ? speaking.has('me') : speaking.has(s.id));
     return `<div class="seat ${s ? 'human' : ''} ${mine ? 'me' : ''} ${talking ? 'speaking' : ''}" style="--c:${r.color}">
       <div class="face">${r.emoji}</div><div class="who">${r.name}</div>
-      <div class="name">${s ? s.name + (mine ? ' (you)' : '') : 'Bot'}</div></div>`;
+      <div class="name">${s ? s.name + (mine ? ' (you)' : '') : 'Crew bot'}</div></div>`;
   }).join('');
   const n = net.seats.filter(Boolean).length;
   ui.lobbyStatus.textContent = net.role === 'host'
-    ? (n < 2 ? 'Share the link. You can start whenever you like; empty seats are bots.' : `${n} players in. Start when everyone is here.`)
+    ? (n < 2 ? 'Share the link. You can start whenever you like; empty seats are crew bots.' : `${n} players in. Start when everyone is here.`)
     : 'Waiting for the host to start. Everyone uses Space + A/D (or any seat keys, a gamepad, or touch).';
+  if (net.role !== 'host') ui.lobbyLevel.value = String(net.level);
 }
 function hostStart() { net.broadcast({ t: 'start', level: net.level }); startGame({ online: 'host' }); }
 ui.lobbyStart.addEventListener('click', hostStart);
@@ -223,14 +269,15 @@ net.on('ev', (d) => {
   if (d.e === 'checkpoint') { G.hud.toast('CHECKPOINT'); audio.chime(); }
   if (d.e === 'die') G.hud.toast(['POPPED!', 'OUCH!', 'SPIKED!'][d.n % 3]);
   if (d.e === 'bump') { audio.bump(d.k); effects.splash(G.raft.x, G.raft.z, 8); }
-  if (d.e === 'cd') { G.hud.countdown(d.v); if (d.v) audio.beep(d.v === 'GO!'); }
-  if (d.e === 'finish') { audio.fanfare(); G.hud.toast('FINISH!'); }
+  if (d.e === 'geyser') { audio.geyser(); effects.shake = 1; }
+  if (d.e === 'can') G.hud.toast('BEANS!');
+  if (d.e === 'cd') { G.hud.countdown(d.v); if (d.v) audio.beep(d.v === 'GO!'); if (d.v === 'GO!') { G.hud.hint('HOLD SPACE (or tap) TO TOOT · A / D TO AIM'); setTimeout(() => G && G.hud.hint(''), 9000); } }
+  if (d.e === 'finish') { audio.fanfare(); audio.stopMusic(); G.hud.toast('FINISH!'); effects.confetti(G.raft.x, G.raft.z, 90); }
 });
-net.on('end', (d) => { if (G && G.online === 'client') { G.time = d.time; setTimeout(() => { if (G && G.online === 'client') showFinish(d.time, d.retries, G.level, true); }, 1600); } });
-net.on('closed', () => { if (net.role === 'client') { net.leave(); if (G) G.hud.show(false); show(ui.party); ui.setup.hidden = false; ui.lobby.hidden = true; mode = 'party'; partyError('The host left the party.'); } });
+net.on('end', (d) => { if (G && G.online === 'client') { G.time = d.time; G.raft.cans = d.cans || 0; setTimeout(() => { if (G && G.online === 'client') showFinish(d.time, d.retries, true); }, 1700); } });
+net.on('closed', () => { if (net.role === 'client') { net.leave(); audio.stopMusic(); if (G) G.hud.show(false); show(ui.party); ui.setup.hidden = false; ui.lobby.hidden = true; mode = 'party'; partyError('The host left the party.'); } });
 net.on('error', (e) => { if (mode === 'party') partyError(e.message || String(e.type || e)); });
 
-// invite link: ?room=CODE opens the join panel with the code filled in
 const roomParam = new URLSearchParams(location.search).get('room');
 if (roomParam) { ui.online.click(); ui.pcode.value = roomParam.toUpperCase().slice(0, 5); }
 
@@ -259,12 +306,11 @@ function updateCamera(dt) {
 const FIXED = 1 / 120;
 let acc = 0, last = performance.now(), voiceT = 0;
 function frame(now) { requestAnimationFrame(frame); tick(now); }
-// debug/automation hook: window.gasRapids.tick(seconds) advances the game without waiting for rAF
-window.gasRapids = { tick(sec = 1, fps = 60) { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) tick(last + 1000 / fps, i === n - 1); }, get state() { return G; }, startGame, net };
+// debug/automation hook: window.tootRiver.tick(seconds) advances the game without waiting for rAF
+window.tootRiver = { tick(sec = 1, fps = 60) { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) tick(last + 1000 / fps, i === n - 1); }, get state() { return G; }, startGame, net, setLevel(i) { selectedLevel = i; }, prog, LEVELS };
 function tick(now, render = true) {
   let dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = Math.max(last, now);
   clock += dt;
-  // voice activity indicators (lobby and HUD)
   voiceT += dt;
   if (net.connected && voiceT > 0.12) {
     voiceT = 0;
@@ -276,7 +322,10 @@ function tick(now, render = true) {
     const { raft, track, hud } = G;
     if (G.online === 'client') {
       net.sendInput(input.readAny());
-      if (G.snap) { raft.applySnapshot(G.snap, dt); G.time = G.snap.f ? G.time : G.time + dt; }
+      G.trackTime += dt;
+      if (G.snap) { raft.applySnapshot(G.snap, dt); if (Math.abs(G.snap.tc - G.trackTime) > 0.25) G.trackTime = G.snap.tc; G.time = G.snap.f ? G.time : G.time + dt; }
+      track.update(G.trackTime, dt);
+      for (const g of track.geysers) if (g.field.active && Math.random() < 0.6) effects.geyser(g.field.x, g.field.z);
     } else {
       const inputs = G.online === 'host' ? null : input.read();
       if (G.phase === 'countdown') {
@@ -284,7 +333,7 @@ function tick(now, render = true) {
         const n = Math.ceil(G.cd);
         const label = n > 0 ? String(n) : 'GO!';
         if (label !== G.cdShown) { G.cdShown = label; hud.countdown(label); audio.beep(n <= 0); if (G.online === 'host') net.broadcast({ t: 'ev', e: 'cd', v: label }); }
-        if (G.cd <= 0) G.phase = 'race';
+        if (G.cd <= 0) { G.phase = 'race'; G.hintT = 12; hud.hint(G.online ? 'HOLD SPACE (or tap) TO TOOT · A / D TO AIM' : 'HOLD SPACE TO TOOT · A / D TO AIM · YOUR CREW TOOTS WITH YOU'); }
         if (G.cd < -0.9) { hud.countdown(''); if (G.online === 'host') net.broadcast({ t: 'ev', e: 'cd', v: '' }); }
       } else if (G.phase === 'race' || G.phase === 'finished') {
         if (G.phase === 'race') G.time += dt;
@@ -292,36 +341,44 @@ function tick(now, render = true) {
         let merged;
         if (G.online === 'host') {
           const occupied = net.seats.map(Boolean);
-          const botIn = G.bots.read(raft, dt, clock, occupied);
           const mine = input.readAny();
+          const drive = mine.fart || net.inputs.some((x) => x && x.fart);
+          const botIn = G.bots.read(raft, dt, G.trackTime, occupied, drive);
           merged = occupied.map((o, i) => (i === net.mySeat ? mine : o ? net.inputs[i] || { fart: false, aim: 0, pop: false } : botIn[i] || { fart: false, aim: 0, pop: false }));
         } else {
           const hm = localRoles();
-          const botIn = G.bots.read(raft, dt, clock, hm);
+          const drive = inputs.some((inp, i) => hm[i] && inp.fart);
+          const botIn = G.bots.read(raft, dt, G.trackTime, hm, drive);
           merged = inputs.map((inp, i) => (hm[i] ? inp : botIn[i] || { fart: false, aim: 0, pop: false }));
         }
+        if (G.hintT > 0) { G.hintT -= dt; if (G.hintT <= 0 || (G.time > 1.5 && Math.hypot(raft.vx, raft.vz) > 6)) { G.hintT = 0; hud.hint(''); } }
+        if (G.bots.braking && !G.brakeShown) { G.brakeShown = true; hud.toast('CREW: WAIT FOR IT…'); } else if (!G.bots.braking) G.brakeShown = false;
+        G.trackTime += dt;
+        track.update(G.trackTime, dt);
         acc += dt;
         let steps = 0;
         while (acc >= FIXED && steps < 8) { raft.step(FIXED, merged, clock); acc -= FIXED; steps++; merged.forEach((m) => (m.pop = false)); }
-        for (const i in net.inputs) if (net.inputs[i]) net.inputs[i].pop = false; // a remote pop is consumed once
+        for (const i in net.inputs) if (net.inputs[i]) net.inputs[i].pop = false;
         for (const ev of raft.events) {
           if (ev === 'checkpoint') hud.toast('CHECKPOINT');
           if (ev === 'die') hud.toast(['POPPED!', 'OUCH!', 'SPIKED!'][raft.retries % 3]);
+          if (ev === 'can') hud.toast('BEANS!');
+          if (ev === 'geyser') { audio.geyser(); effects.shake = 1; }
           if (ev === 'finish' && G.phase === 'race') finishGame();
           if (G.online === 'host') net.broadcast({ t: 'ev', e: ev, n: raft.retries, k: raft.bump });
         }
         raft.events.length = 0;
-        if (G.online === 'host' && clock - G.lastSnap > 1 / 30) { G.lastSnap = clock; net.broadcast(raft.snapshot()); }
+        for (const g of track.geysers) if (g.field.active && Math.random() < 0.6) effects.geyser(g.field.x, g.field.z);
+        if (G.online === 'host' && clock - G.lastSnap > 1 / 30) { G.lastSnap = clock; net.broadcast(raft.snapshot(G.trackTime)); }
       }
     }
     raft.syncMesh(clock, dt);
-    track.update(clock);
     effects.update(dt);
     updateCamera(dt);
     hud.update(raft, G.time, track.finishD);
   } else if (G) {
-    // idle: slow orbit around the raft behind the title / party / finish screens
-    effects.update(dt); G.track.update(clock); G.raft.syncMesh(clock, dt);
+    // idle: slow orbit around the raft behind the menus
+    effects.update(dt); G.track.update(clock, dt); G.raft.syncMesh(clock, dt);
     const r = G.raft, a = clock * 0.25;
     camera.position.set(r.x + Math.sin(a) * 14, 7 + Math.sin(clock * 0.5), r.z + Math.cos(a) * 14);
     camera.lookAt(r.x, 1, r.z);
@@ -333,12 +390,6 @@ requestAnimationFrame(frame);
 
 // preview scene behind the title so the page is never empty
 (function preview() {
-  const level = LEVELS[0];
-  const track = buildTrack(level);
-  scene.add(track.group);
-  scene.background = new THREE.Color(level.theme.fog);
-  scene.fog = new THREE.Fog(level.theme.fog, 90, 260);
-  const raft = new Raft(track, effects, audio);
-  scene.add(raft.mesh);
-  G = { level, online: null, track, raft, bots: new Bots(track), hud: new Hud(raft.players), time: 0, phase: 'idle', cd: 0, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false };
+  const { level, track, raft } = loadLevel(0);
+  G = { idx: 0, level, online: null, track, raft, bots: new Bots(track), hud: new Hud(raft.players), time: 0, trackTime: 0, phase: 'idle', cd: 0, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false };
 })();

@@ -22,6 +22,8 @@ export function fmtTime(s) {
   return `${String(m).padStart(2, '0')}:${sec.toFixed(2).padStart(5, '0')}`;
 }
 
+const canvasTex = (c) => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+
 /** Canvas-drawn text texture for signs and banners. */
 export function textTexture(text, { w = 512, h = 160, bg = '#ffd23f', fg = '#1b1d24', stroke = '#c2410c', font = 'bold 110px "Lilita One", "Archivo", sans-serif', radius = 24 } = {}) {
   const c = document.createElement('canvas');
@@ -33,23 +35,28 @@ export function textTexture(text, { w = 512, h = 160, bg = '#ffd23f', fg = '#1b1
   g.lineWidth = 12; g.strokeStyle = stroke; g.lineJoin = 'round';
   g.strokeText(text, w / 2, h / 2 + 6);
   g.fillStyle = fg; g.fillText(text, w / 2, h / 2 + 6);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
+  return canvasTex(c);
+}
+
+/** Tin-can label wrapped around a cylinder. */
+export function labelTexture(text) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e63946'; g.fillRect(0, 0, 512, 128);
+  g.fillStyle = '#fff3c4'; g.fillRect(0, 22, 512, 84);
+  g.font = 'bold 64px "Lilita One", "Archivo", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#7a3b12'; g.fillText(text, 128, 66); g.fillText(text, 384, 66);
+  g.fillStyle = '#5fd400'; for (let i = 0; i < 6; i++) { g.beginPath(); g.ellipse(256, 40 + i * 9, 14, 7, 0.4, 0, 7); g.fill(); }
+  return canvasTex(c);
 }
 
 export function checkerTexture() {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 64;
   const g = c.getContext('2d');
-  for (let y = 0; y < 2; y++) for (let x = 0; x < 8; x++) {
-    g.fillStyle = (x + y) % 2 ? '#1b1d24' : '#ffffff';
-    g.fillRect(x * 32, y * 32, 32, 32);
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  for (let y = 0; y < 2; y++) for (let x = 0; x < 8; x++) { g.fillStyle = (x + y) % 2 ? '#1b1d24' : '#ffffff'; g.fillRect(x * 32, y * 32, 32, 32); }
+  return canvasTex(c);
 }
 
 /** Soft radial sprite texture for gas puffs and ripples. */
@@ -62,16 +69,32 @@ export function puffTexture() {
   grd.addColorStop(0.55, 'rgba(255,255,255,.75)');
   grd.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
-  const tex = new THREE.CanvasTexture(c);
-  return tex;
+  return new THREE.CanvasTexture(c);
 }
 
-export function ringTexture() {
+function ringCanvas() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d');
-  g.strokeStyle = 'rgba(255,255,255,.9)';
-  g.lineWidth = 7;
+  g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 7;
   g.beginPath(); g.arc(64, 64, 54, 0, Math.PI * 2); g.stroke();
   return new THREE.CanvasTexture(c);
 }
+function swirlCanvas() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 6; g.lineCap = 'round';
+  for (let arm = 0; arm < 3; arm++) {
+    g.beginPath();
+    for (let i = 0; i <= 60; i++) { const t = i / 60, a = arm * (Math.PI * 2 / 3) + t * 4.2, r = 6 + t * 112; const x = 128 + Math.cos(a) * r, y = 128 + Math.sin(a) * r; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+  }
+  return new THREE.CanvasTexture(c);
+}
+let _ring, _swirl, _puff;
+export const ringTexture = Object.assign(() => (_ring ||= ringCanvas()), {
+  ring: () => (_ring ||= ringCanvas()),
+  swirl: () => (_swirl ||= swirlCanvas()),
+  puff: () => (_puff ||= puffTexture()),
+});

@@ -1,0 +1,8 @@
+L1 First Toots      finish 72.2s retries=0 beans=3
+L2 Monkey Bends     finish 95.2s retries=0 beans=2
+L3 Red Rock Run     finish 97.3s retries=0 beans=1
+L4 Dust Devil       finish 94.2s retries=0 beans=1
+L5 Slippery Slopes  finish 97.6s retries=0 beans=1
+L6 Frozen Falls     TIMEOUT at d=582/676 retries=9 beans=1  deaths: roller@d407, roller@d407, roller@d407, roller@d407, roller@d408, roller@d406
+L7 Magma Mouth      finish 206.5s retries=4 beans=1  deaths: hammer@d397(braking), hammer@d399(braking), hammer@d419(braking), hammer@d399(braking)
+L8 Eruption Run     TIMEOUT at d=575/726 retries=8 beans=2  deaths: hammer@d158(braking), buoy@d643, hammer@d582(braking), hammer@d583(braking), buoy@d643, buoy@d643

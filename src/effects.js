@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { puffTexture, ringTexture } from './util.js';
 
-/** Pooled sprite particles: gas puffs, splashes, water ripples. */
+/** Pooled sprite particles: gas puffs, splashes, sparkles, confetti, water ripples. */
 export class Effects {
   constructor(scene) {
     this.scene = scene;
@@ -10,7 +10,9 @@ export class Effects {
     this.gasMat = new THREE.SpriteMaterial({ map: puff, color: 0x9bff2e, transparent: true, depthWrite: false, opacity: 0.85 });
     this.gasMat2 = new THREE.SpriteMaterial({ map: puff, color: 0xd6ff5e, transparent: true, depthWrite: false, opacity: 0.85 });
     this.splashMat = new THREE.SpriteMaterial({ map: puff, color: 0xffffff, transparent: true, depthWrite: false });
-    for (let i = 0; i < 260; i++) {
+    this.sparkMat = new THREE.SpriteMaterial({ map: puff, color: 0xffd23f, transparent: true, depthWrite: false });
+    this.confettiMats = [0xff4fa3, 0xffd23f, 0x5fd400, 0x2f7ff0, 0xff6a1f, 0xffffff].map((c) => new THREE.SpriteMaterial({ map: puff, color: c, transparent: true, depthWrite: false }));
+    for (let i = 0; i < 320; i++) {
       const s = new THREE.Sprite(this.gasMat);
       s.visible = false; scene.add(s);
       this.pool.push({ s, life: 0, max: 1, vx: 0, vy: 0, vz: 0, grow: 1, kind: 'gas' });
@@ -50,6 +52,24 @@ export class Effects {
     this.ripple(x, z, 2.5);
     this.shake = Math.min(1, this.shake + n / 30);
   }
+  geyser(x, z) {
+    for (let i = 0; i < 3; i++) {
+      this.spawn('splash', x + (Math.random() - 0.5) * 1.5, 0.5, z + (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 2, 12 + Math.random() * 6, (Math.random() - 0.5) * 2, 1.2 + Math.random(), 1 + Math.random() * 0.4, this.splashMat);
+    }
+  }
+  sparkle(x, z) {
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * 6.28, sp = 1 + Math.random() * 3;
+      this.spawn('spark', x, 1, z, Math.cos(a) * sp, 3 + Math.random() * 4, Math.sin(a) * sp, 0.5 + Math.random() * 0.5, 0.8 + Math.random() * 0.4, this.sparkMat);
+    }
+    this.ripple(x, z, 1.5);
+  }
+  confetti(x, z, n = 60) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.28, sp = 2 + Math.random() * 6;
+      this.spawn('confetti', x, 1.5, z, Math.cos(a) * sp, 9 + Math.random() * 8, Math.sin(a) * sp, 0.35 + Math.random() * 0.3, 2 + Math.random() * 1.5, this.confettiMats[i % this.confettiMats.length]);
+    }
+  }
   ripple(x, z, size = 1) {
     const r = this.rings.find((r) => r.life <= 0);
     if (!r) return;
@@ -64,7 +84,9 @@ export class Effects {
       const k = 1 - p.life / p.max;
       p.s.position.x += p.vx * dt; p.s.position.y += p.vy * dt; p.s.position.z += p.vz * dt;
       if (p.kind === 'gas') { p.vx *= 1 - dt * 2.2; p.vz *= 1 - dt * 2.2; p.vy += dt * 0.6; p.s.scale.setScalar(p.grow * (0.5 + k * 1.6)); p.s.material.opacity = 0.85 * (1 - k) ** 1.2; }
-      else { p.vy -= 22 * dt; p.s.scale.setScalar(p.grow * (1 - k * 0.5)); if (p.s.position.y < 0) p.life = 0, p.s.visible = false; }
+      else if (p.kind === 'spark') { p.vy -= 6 * dt; p.s.scale.setScalar(p.grow * (1 - k)); }
+      else if (p.kind === 'confetti') { p.vy -= 12 * dt; p.vx *= 1 - dt; p.vz *= 1 - dt; p.s.scale.set(p.grow * (0.6 + 0.4 * Math.sin(k * 40)), p.grow, 1); if (p.s.position.y < 0.1) p.s.position.y = 0.1; }
+      else { p.vy -= 22 * dt; p.s.scale.setScalar(p.grow * (1 - k * 0.5)); if (p.s.position.y < 0) { p.life = 0; p.s.visible = false; } }
     }
     for (const r of this.rings) {
       if (r.life <= 0) continue;

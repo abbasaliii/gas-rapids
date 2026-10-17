@@ -14,10 +14,12 @@ export class Bots {
   targetLat(d) {
     const T = this.track;
     let target = 0, weight = 0;
+    this.hazard = false;
     for (const o of T.obstacles) {
       const od = o.d ?? (o.d = T.nearest(o.type === 'circle' ? o.x : (o.ax + o.bx) / 2, o.type === 'circle' ? o.z : (o.az + o.bz) / 2, Math.round(d)).d);
       const ahead = od - d;
-      if (ahead < -2 || ahead > 34) continue;
+      if (ahead < 1 || ahead > 34) continue;
+      this.hazard = true;
       const s = T.at(od);
       const w = 1 - Math.abs(ahead) / 36;
       if (o.type === 'circle') {
@@ -35,7 +37,12 @@ export class Bots {
     }
     return weight > 0 ? target / weight : 0;
   }
-  read(raft, dt, t, humans) {
+  /**
+   * humans[i]: seat i is a person. drive: a person is farting right now.
+   * Bots fart WITH the people: they only add thrust while a human is pushing, and on their own they only
+   * steer to dodge a hazard. Nobody pushing means the raft just drifts with the river.
+   */
+  read(raft, dt, t, humans, drive = true) {
     const T = this.track;
     const out = [];
     const sp = Math.hypot(raft.vx, raft.vz);
@@ -47,8 +54,37 @@ export class Bots {
     const vlat = raft.vx * here.lx + raft.vz * here.lz; // sideways speed (+ = drifting left)
     const err = (tl - raft.lat) - vlat * 0.7;              // metres to correct, with predictive damping
     const latK = clamp(err / 3.5, -1, 1);
-    const fwdK = sp > 12 ? 0.15 : 0.55;                     // ease off forward pushing when already fast
+    let fwdK = !drive ? 0 : sp > 12 ? 0.15 : 0.55;          // ease off forward pushing when already fast
+    fwdK *= 1 - Math.min(0.8, Math.abs(err) / 5);           // and when there is a lot of sideways correcting to do
+    // swinging hammers: work out whether the ball will be low at any point while we pass under it.
+    // Not safe -> the crew holds the raft back. Safe -> the crew punches through, even if the human eases off.
+    this.braking = false; this.punch = false;
+    let sawHammer = false;
+    for (const h of T.hammers || []) {
+      const aheadD = h.s.d - raft.d;
+      if (aheadD < -4 || aheadD > 16 + sp * 1.6) continue;
+      sawHammer = true;
+      if (aheadD < 2) { if (drive) this.punch = true; this.brakeSince = null; break; } // already under it: never reverse back in, get clear
+      const vGo = Math.max(sp, 7);
+      const tIn = Math.max(0, aheadD - 4) / vGo, tOut = (aheadD + 3.5) / vGo;
+      const low = (tt) => Math.abs(1.3 * Math.sin((tt * Math.PI * 2) / h.period + h.phase)) < 0.26;
+      let safe = true;
+      for (let tt = tIn; tt <= tOut + 0.05; tt += 0.1) if (low(t + tt)) { safe = false; break; }
+      // waited too long (no window fits): take the next gap where the ends are clear
+      if (!safe && this.brakeSince != null && t - this.brakeSince > 5 && !low(t + tIn) && !low(t + tOut)) safe = true;
+      const vAlong = raft.vx * here.tx + raft.vz * here.tz; // forward speed along the course
+      if (!safe) { if (aheadD < 7 + sp * 1.1 && vAlong > -0.5) { this.braking = true; this.brakeSince ??= t; } else this.coast = true; }
+      else if (drive && aheadD < 14) { this.punch = true; this.brakeSince = null; }
+      break;
+    }
+    if (!sawHammer) this.brakeSince = null;
+    const steerOnly = !drive && !this.braking;
+    if (this.coast) { this.coast = false; }
+    const mustSteer = steerOnly && this.hazard && Math.abs(err) > 1.5;
+    if (steerOnly && !mustSteer) { for (let i = 0; i < 4; i++) { this.state[i].fart = false; this.state[i].pop = false; out.push(humans[i] ? null : { fart: false, aim: this.state[i].aim, pop: false }); } return out; }
     let dx = ahead.tx * fwdK + here.lx * latK, dz = ahead.tz * fwdK + here.lz * latK;
+    if (this.braking) { dx = -here.tx + here.lx * latK * 0.4; dz = -here.tz + here.lz * latK * 0.4; }
+    else if (this.punch) { dx = ahead.tx + here.lx * latK * 0.3; dz = ahead.tz + here.lz * latK * 0.3; }
     const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
     // counter-spin when the raft is rotating fast
     for (let i = 0; i < 4; i++) {
@@ -70,12 +106,13 @@ export class Bots {
           if (score > best) { best = score; bestAim = aim; }
         }
         const pl = raft.players[i];
-        const threshold = pl.gas > 60 ? 0.35 : pl.gas > 25 ? 0.55 : 0.8;
-        st.fart = best > threshold && !pl.empty && Math.random() < 0.97;
-        st.pop = st.fart && best > 0.8 && sp < 6 && Math.random() < 0.3;
+        // keep a gas reserve for braking and dodging: no forward pushing below 45 gas
+        const threshold = this.braking || this.punch ? 0.25 : steerOnly ? 0.6 : pl.gas > 65 ? 0.35 : pl.gas > 50 ? 0.6 : Math.abs(err) > 2.5 ? 0.85 : 2;
+        st.fart = best > threshold && !pl.empty && (this.braking || this.punch || Math.random() < 0.97);
+        st.pop = st.fart && best > 0.8 && sp < 6 && (this.punch || Math.random() < 0.3);
         st.aim = bestAim;
       } else st.pop = false;
-      out.push({ fart: st.fart, aim: st.aim, pop: st.pop });
+      out.push({ fart: st.fart, aim: st.aim, pop: st.pop, free: this.braking }); // holding the raft back costs the crew no gas
     }
     return out;
   }

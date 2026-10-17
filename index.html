@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Gas Rapids</title>
-  <meta name="description" content="A four-player fart-powered raft race. One button each. Fart together or spin out." />
+  <title>Toot River</title>
+  <meta name="description" content="Toot River: a four-player fart-powered raft race across jungle, canyon, frost and volcano. One button each. Toot together or spin out." />
+  <meta property="og:title" content="Toot River" />
+  <meta property="og:description" content="Four animals. One raft. One button each. Toot together or spin out." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Archivo:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -16,36 +18,43 @@
   <!-- in-race HUD -->
   <div id="hud" class="hud" hidden>
     <div class="progress"><div class="progress-fill"></div><div class="progress-ticks"></div><div class="progress-raft">🛟</div></div>
+    <div class="gasbars" id="gasbars"></div>
     <div class="topbar">
-      <div class="gasbars" id="gasbars"></div>
       <div class="timer"><span class="clock">⏱</span><span id="timer">00:00.00</span></div>
       <div class="right">
         <button id="mic-hud" class="mic" hidden title="Toggle microphone (M)">🎤</button>
-        <div class="retries"><span>↻</span><span id="retries">0</span></div>
+        <div class="pill" title="Beans collected"><span>🥫</span><span id="cans">0</span></div>
+        <div class="pill retries" title="Retries"><span>↻</span><span id="retries">0</span></div>
       </div>
     </div>
     <div id="toast" class="toast"></div>
     <div id="countdown" class="countdown"></div>
+    <div id="hint" class="race-hint"></div>
     <div id="touch" class="touch"></div>
   </div>
 
   <!-- title -->
   <div id="title" class="screen title">
-    <div class="logo"><span class="l1">GAS</span><span class="l2">RAPIDS</span></div>
+    <div class="logo"><span class="l1">TOOT</span><span class="l2">RIVER</span></div>
     <p class="tag">Four animals. One raft. One button each.</p>
-    <div class="seats" id="seats"></div>
-    <p class="hint">Press your fart key to take a seat. Empty seats are bots. <b>Space</b> starts.</p>
+    <div class="row big">
+      <button id="play" class="btn">Play</button>
+      <button id="online" class="btn alt">Party with friends</button>
+    </div>
     <div class="row">
       <label class="opt"><input type="checkbox" id="opt-sound" checked /> Sound</label>
-      <label class="opt"><input type="checkbox" id="opt-bots" checked /> Bots fill empty seats</label>
-      <label class="opt">Level
-        <select id="opt-level"><option value="0">Jungle Rapids</option><option value="1">Canyon Slide</option></select>
-      </label>
+      <label class="opt"><input type="checkbox" id="opt-music" checked /> Music</label>
     </div>
-    <div class="row">
-      <button id="start" class="btn">Start race</button>
-      <button id="online" class="btn alt">Play online with friends</button>
-    </div>
+    <p class="hint">Local co-op: up to four on one keyboard. Any seat nobody takes is crewed by a bot that toots when you do.</p>
+  </div>
+
+  <!-- level select -->
+  <div id="levels" class="screen levels" hidden>
+    <h1 class="h">LEVELS</h1>
+    <div id="worlds" class="worlds"></div>
+    <div class="seats" id="seats"></div>
+    <p class="hint">Press a seat's key to take it before you launch, or just go and let the crew follow your lead.</p>
+    <button id="levels-back" class="btn ghost">Back</button>
   </div>
 
   <!-- online party -->
@@ -54,9 +63,7 @@
     <div id="party-setup" class="panel">
       <p class="hint">Create a party and send the link, or paste a friend's code. Voice chat is on for everyone in the party.</p>
       <input id="pname" class="field" placeholder="Your name" maxlength="12" autocomplete="nickname" />
-      <div class="row">
-        <button id="host" class="btn">Create party</button>
-      </div>
+      <div class="row"><button id="host" class="btn">Create party</button></div>
       <div class="row joinrow">
         <input id="pcode" class="field code" placeholder="CODE" maxlength="5" autocapitalize="characters" />
         <button id="join" class="btn alt">Join</button>
@@ -72,9 +79,7 @@
       </div>
       <div class="seats" id="lobby-seats"></div>
       <div class="row">
-        <label class="opt" id="lobby-level-wrap">Level
-          <select id="lobby-level"><option value="0">Jungle Rapids</option><option value="1">Canyon Slide</option></select>
-        </label>
+        <label class="opt" id="lobby-level-wrap">Level <select id="lobby-level"></select></label>
         <button id="mic" class="btn ghost">🎤 Mic on</button>
       </div>
       <p id="lobby-status" class="hint"></p>
@@ -88,11 +93,13 @@
   <!-- finish -->
   <div id="finish" class="screen finish" hidden>
     <h1>FINISH</h1>
+    <div class="stars" id="stars"><i>★</i><i>★</i><i>★</i></div>
     <div class="result"><span id="f-time">00:00.00</span><small id="f-sub">retries 0</small></div>
     <div id="f-best" class="best"></div>
     <div class="row">
-      <button id="again" class="btn">Race again</button>
-      <button id="menu" class="btn ghost">Menu</button>
+      <button id="next" class="btn">Next level</button>
+      <button id="again" class="btn alt">Race again</button>
+      <button id="menu" class="btn ghost">Levels</button>
     </div>
     <p id="f-wait" class="hint" hidden>Waiting for the host to start the next race…</p>
   </div>

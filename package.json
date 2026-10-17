@@ -1,5 +1,5 @@
 {
-  "name": "gas-rapids",
+  "name": "toot-river",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -9,12 +9,13 @@
     "preview": "vite preview",
     "deploy:web": "vite build && wrangler deploy",
     "deploy:broker": "wrangler deploy -c server/wrangler.jsonc",
-    "deploy": "npm run deploy:broker && npm run deploy:web"
+    "deploy": "npm run deploy:broker && npm run deploy:web",
+    "sim": "node sim/run.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Four-player fart-powered raft race. Toot together or spin out.",
   "type": "module",
   "dependencies": {
     "peerjs": "^1.5.5",
