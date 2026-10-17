@@ -122,3 +122,10 @@
 
 @media (max-width:700px){.gasbar .bar{width:100px}.gasbar .nm{min-width:0}.gasbar .nm small{display:none}.world h2{min-width:100%;text-align:center}.world h2 span{display:inline;margin-left:8px}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition-duration:.01s!important}}
+
+.players{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.72);border-radius:999px;padding:6px 8px 6px 16px;box-shadow:0 6px 0 rgba(0,0,0,.08)}
+.players span{font:700 14px var(--font);color:var(--navy);margin-right:4px}
+.players button{font-family:var(--font-display);font-size:20px;width:42px;height:42px;border-radius:50%;border:0;background:#fff;color:var(--navy);cursor:pointer;box-shadow:0 3px 0 rgba(0,0,0,.12);transition:transform .15s cubic-bezier(.2,1.5,.4,1),background .15s,color .15s}
+.players button.on{background:var(--orange);color:#fff;transform:scale(1.12);box-shadow:0 3px 0 #b84500}
+.row.setup{animation-delay:.2s}
+.seat.empty{opacity:.5;filter:grayscale(.7)}

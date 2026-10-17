@@ -9,7 +9,9 @@ Everything here is original and free to use commercially: code, art (built from 
 ## The game
 
 - **8 levels in 4 worlds**: Jungle, Canyon, Frostbite, Volcano. Levels unlock in order. Each has gold, silver and bronze times, a best time, and stars on the level-select screen.
-- **Crew**: Stinky the skunk (back seat), Porkchop the pig (right), Ribbit the frog (front), Blubber the seal (left). Seats nobody takes are crewed by bots that toot *with* you: they add thrust only while you are tooting, steer around hazards on their own, and hold the raft back at swinging hammers until the gap is safe ("CREW: WAIT FOR IT…").
+- **1 to 4 players** on one keyboard: pick the count on the level screen. Seats nobody takes can be crewed by bots (they drive, steer and brake at hammers, but push harder when a human is tooting) or left empty for the raw, harder, original-style raft.
+- **Crew**: Stinky the skunk (back seat), Porkchop the pig (right), Ribbit the frog (front), Blubber the seal (left).
+- **Feel**: every jet leaves slightly off-centre and sputters, the raft spins when hit and only weakly straightens itself, so coordination and timing matter. Tap for a punchy pop, hold for thrust.
 - **Hazards**: spiked buoys, lava pools, spinning spike rollers, fences with gaps, swinging spiked hammers, drifting logs, whirlpools, erupting geysers, ice (slippery), boost currents, spiked rails.
 - **Beans**: cans of beans refill the whole crew's gas. The HUD counts them.
 - **Gas**: tap for a short pop, hold for sustained thrust. Run the bar to zero and you sputter until it recovers.

@@ -44,7 +44,7 @@ addEventListener('resize', resize); resize();
 const $ = (id) => document.getElementById(id);
 const ui = {
   title: $('title'), levels: $('levels'), finish: $('finish'), party: $('party'), seats: $('seats'), worlds: $('worlds'),
-  play: $('play'), online: $('online'), sound: $('opt-sound'), music: $('opt-music'), levelsBack: $('levels-back'),
+  play: $('play'), online: $('online'), sound: $('opt-sound'), music: $('opt-music'), bots: $('opt-bots'), levelsBack: $('levels-back'),
   fTime: $('f-time'), fSub: $('f-sub'), fBest: $('f-best'), fWait: $('f-wait'), stars: $('stars'), next: $('next'), again: $('again'), menu: $('menu'),
   setup: $('party-setup'), lobby: $('party-lobby'), pname: $('pname'), pcode: $('pcode'), host: $('host'), join: $('join'), partyErr: $('party-error'),
   partyBack: $('party-back'), codeOut: $('code-out'), invite: $('invite-link'), copy: $('copy'), lobbySeats: $('lobby-seats'), lobbyLevel: $('lobby-level'),
@@ -54,6 +54,12 @@ let G = null;       // current game
 let mode = 'title'; // title | levels | party | game | finish
 let clock = 0;
 let selectedLevel = 0;
+let players = 1, crewBots = true;
+try { players = Math.min(4, Math.max(1, +localStorage.getItem('tootriver-players') || 1)); crewBots = localStorage.getItem('tootriver-bots') !== '0'; } catch {}
+const setPlayers = (n) => { players = n; try { localStorage.setItem('tootriver-players', n); } catch {} input.claimed = [0, 1, 2, 3].map((i) => i < n); renderSeats(); };
+const setBots = (on) => { crewBots = on; try { localStorage.setItem('tootriver-bots', on ? '1' : '0'); } catch {} renderSeats(); };
+/** which seats have a body in them this race: humans, plus crew bots if enabled */
+const activeSeats = () => [0, 1, 2, 3].map((i) => i < players || crewBots);
 
 function show(screen) { for (const s of [ui.title, ui.levels, ui.party, ui.finish]) s.hidden = s !== screen; }
 
@@ -87,19 +93,38 @@ function renderLevels() {
 }
 
 function renderSeats() {
-  ui.seats.innerHTML = ROSTER.map((r, i) => `
-    <div class="seat ${input.claimed[i] ? 'human' : ''}" style="--c:${r.color}">
+  document.querySelectorAll('#players button').forEach((b) => b.classList.toggle('on', +b.dataset.n === players));
+  ui.bots.checked = crewBots;
+  ui.seats.innerHTML = ROSTER.map((r, i) => {
+    const human = i < players, empty = !human && !crewBots;
+    return `
+    <div class="seat ${human ? 'human' : ''} ${empty ? 'empty' : ''}" style="--c:${r.color}">
       <div class="face">${r.emoji}</div>
       <div class="who">${r.name}</div>
-      <div class="role">${input.claimed[i] ? 'YOU' : 'CREW BOT'}</div>
+      <div class="role">${human ? `PLAYER ${i + 1}` : crewBots ? 'CREW BOT' : 'EMPTY SEAT'}</div>
       <kbd>${KEYMAP[i].label}</kbd>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
-input.onClaim(() => { if (mode === 'levels') renderSeats(); if (G && !G.online && mode === 'game') G.hud.setRoles(localRoles()); });
-const localRoles = () => input.claimed.map(Boolean);
+document.querySelectorAll('#players button').forEach((b) => b.addEventListener('click', () => setPlayers(+b.dataset.n)));
+$('opt-bots').addEventListener('change', (e) => setBots(e.target.checked));
+const localRoles = () => [0, 1, 2, 3].map((i) => i < players);
+
+// ---------------------------------------------------------------- cel shading
+const gradient = (() => { const d = new Uint8Array([70, 70, 70, 255, 150, 150, 150, 255, 220, 220, 220, 255, 255, 255, 255, 255]); const t = new THREE.DataTexture(d, 4, 1, THREE.RGBAFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
+const toonCache = new Map();
+function toonify(root) {
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material || !o.material.isMeshLambertMaterial) return;
+    const m = o.material;
+    let tm = toonCache.get(m);
+    if (!tm) { tm = new THREE.MeshToonMaterial({ color: m.color, map: m.map || null, gradientMap: gradient, side: m.side, transparent: m.transparent, opacity: m.opacity }); toonCache.set(m, tm); }
+    o.material = tm;
+  });
+}
 
 // ---------------------------------------------------------------- game setup
-function loadLevel(idx) {
+function loadLevel(idx, active) {
   if (G) scene.remove(G.track.group, G.raft.mesh);
   const level = LEVELS[idx];
   const track = buildTrack(level);
@@ -107,7 +132,8 @@ function loadLevel(idx) {
   scene.background = new THREE.Color(level.theme.sky);
   scene.fog = new THREE.Fog(level.theme.fog, 90, 280);
   hemi.groundColor.set(level.theme.bankTop);
-  const raft = new Raft(track, effects, audio);
+  const raft = new Raft(track, effects, audio, active);
+  toonify(track.group); toonify(raft.mesh);
   scene.add(raft.mesh);
   return { level, track, raft };
 }
@@ -116,14 +142,14 @@ function startGame(opts = {}) {
   audio.init(); audio.setEnabled(ui.sound.checked); audio.setMusic(ui.music.checked);
   const online = opts.online || null; // 'host' | 'client' | null
   const idx = online ? net.level : selectedLevel;
-  const { level, track, raft } = loadLevel(idx);
+  const { level, track, raft } = loadLevel(idx, online ? [true, true, true, true] : activeSeats());
   if (online) raft.players.forEach((p, i) => { p.name = net.seats[i] ? net.seats[i].name : p.name; });
   const hud = new Hud(raft.players);
   hud.setTicks(track.checkpoints, track.length);
   hud.show(true);
   G = { idx, level, online, track, raft, bots: new Bots(track), hud, time: 0, trackTime: 0, phase: online === 'client' ? 'client' : 'countdown', cd: 3.9, cdShown: null, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false, snap: null, lastSnap: 0, hintT: 0 };
   if (online) { hud.setRoles(net.seats.map((s, i) => (!s ? false : i === net.mySeat ? true : s.name))); ui.micHud.hidden = false; }
-  else { if (!input.claimed.some(Boolean)) input.claim(0); hud.setRoles(localRoles()); ui.micHud.hidden = true; }
+  else { hud.setRoles(localRoles(), activeSeats()); ui.micHud.hidden = true; }
   hud.toast(`${idx + 1}. ${level.name.toUpperCase()}`);
   audio.stopMusic(); audio.startMusic('race');
   show(null);
@@ -166,7 +192,7 @@ function finishGame() {
   setTimeout(() => { if (G === game) showFinish(G.time, raft.retries, false); }, 1700);
 }
 
-ui.play.addEventListener('click', () => { audio.init(); show(ui.levels); mode = 'levels'; renderLevels(); });
+ui.play.addEventListener('click', () => { audio.init(); show(ui.levels); mode = 'levels'; renderLevels(); setPlayers(players); });
 ui.levelsBack.addEventListener('click', () => { show(ui.title); mode = 'title'; });
 ui.next.addEventListener('click', () => { selectedLevel = Math.min(LEVELS.length - 1, G.idx + 1); startGame(); });
 ui.again.addEventListener('click', () => { if (G && G.online === 'host') hostStart(); else startGame(); });
@@ -333,7 +359,7 @@ function tick(now, render = true) {
         const n = Math.ceil(G.cd);
         const label = n > 0 ? String(n) : 'GO!';
         if (label !== G.cdShown) { G.cdShown = label; hud.countdown(label); audio.beep(n <= 0); if (G.online === 'host') net.broadcast({ t: 'ev', e: 'cd', v: label }); }
-        if (G.cd <= 0) { G.phase = 'race'; G.hintT = 12; hud.hint(G.online ? 'HOLD SPACE (or tap) TO TOOT · A / D TO AIM' : 'HOLD SPACE TO TOOT · A / D TO AIM · YOUR CREW TOOTS WITH YOU'); }
+        if (G.cd <= 0) { G.phase = 'race'; G.hintT = 12; hud.hint(G.online ? 'HOLD SPACE (or tap) TO TOOT · A / D TO AIM' : players > 1 ? 'EVERYONE: HOLD YOUR TOOT KEY · AIM WITH YOUR SIDE KEYS' : 'HOLD SPACE TO TOOT · A / D TO AIM'); }
         if (G.cd < -0.9) { hud.countdown(''); if (G.online === 'host') net.broadcast({ t: 'ev', e: 'cd', v: '' }); }
       } else if (G.phase === 'race' || G.phase === 'finished') {
         if (G.phase === 'race') G.time += dt;
@@ -342,13 +368,13 @@ function tick(now, render = true) {
         if (G.online === 'host') {
           const occupied = net.seats.map(Boolean);
           const mine = input.readAny();
-          const drive = mine.fart || net.inputs.some((x) => x && x.fart);
-          const botIn = G.bots.read(raft, dt, G.trackTime, occupied, drive);
+          const tooting = mine.fart || net.inputs.some((x) => x && x.fart);
+          const botIn = G.bots.read(raft, dt, G.trackTime, occupied, tooting);
           merged = occupied.map((o, i) => (i === net.mySeat ? mine : o ? net.inputs[i] || { fart: false, aim: 0, pop: false } : botIn[i] || { fart: false, aim: 0, pop: false }));
         } else {
           const hm = localRoles();
-          const drive = inputs.some((inp, i) => hm[i] && inp.fart);
-          const botIn = G.bots.read(raft, dt, G.trackTime, hm, drive);
+          const tooting = inputs.some((inp, i) => hm[i] && inp.fart);
+          const botIn = G.bots.read(raft, dt, G.trackTime, hm, tooting);
           merged = inputs.map((inp, i) => (hm[i] ? inp : botIn[i] || { fart: false, aim: 0, pop: false }));
         }
         if (G.hintT > 0) { G.hintT -= dt; if (G.hintT <= 0 || (G.time > 1.5 && Math.hypot(raft.vx, raft.vz) > 6)) { G.hintT = 0; hud.hint(''); } }
@@ -390,6 +416,6 @@ requestAnimationFrame(frame);
 
 // preview scene behind the title so the page is never empty
 (function preview() {
-  const { level, track, raft } = loadLevel(0);
+  const { level, track, raft } = loadLevel(0, [true, true, true, true]);
   G = { idx: 0, level, online: null, track, raft, bots: new Bots(track), hud: new Hud(raft.players), time: 0, trackTime: 0, phase: 'idle', cd: 0, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false };
 })();

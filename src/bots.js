@@ -42,7 +42,8 @@ export class Bots {
    * Bots fart WITH the people: they only add thrust while a human is pushing, and on their own they only
    * steer to dodge a hazard. Nobody pushing means the raft just drifts with the river.
    */
-  read(raft, dt, t, humans, drive = true) {
+  read(raft, dt, t, humans, humanTooting = true) {
+    const drive = true; // the crew keeps the raft moving on its own; a tooting human makes them push harder
     const T = this.track;
     const out = [];
     const sp = Math.hypot(raft.vx, raft.vz);
@@ -89,7 +90,7 @@ export class Bots {
     // counter-spin when the raft is rotating fast
     for (let i = 0; i < 4; i++) {
       const st = this.state[i];
-      if (humans[i]) { out.push(null); continue; }
+      if (humans[i] || !raft.players[i].active) { out.push(null); continue; }
       if (t >= st.next) {
         st.next = t + st.react;
         const sl = seatLocal(i); const len = Math.hypot(sl.x, sl.z);
@@ -107,8 +108,9 @@ export class Bots {
         }
         const pl = raft.players[i];
         // keep a gas reserve for braking and dodging: no forward pushing below 45 gas
-        const threshold = this.braking || this.punch ? 0.25 : steerOnly ? 0.6 : pl.gas > 65 ? 0.35 : pl.gas > 50 ? 0.6 : Math.abs(err) > 2.5 ? 0.85 : 2;
-        st.fart = best > threshold && !pl.empty && (this.braking || this.punch || Math.random() < 0.97);
+        const lazy = humanTooting ? 0 : 0.2; // without a human tooting the crew is half-hearted
+        const threshold = this.braking || this.punch ? 0.25 : steerOnly ? 0.6 : pl.gas > 65 ? 0.35 + lazy : pl.gas > 50 ? 0.6 + lazy : Math.abs(err) > 2.5 ? 0.85 : 2;
+        st.fart = best > threshold && !pl.empty && (this.braking || this.punch || Math.random() < (humanTooting ? 0.97 : 0.75));
         st.pop = st.fart && best > 0.8 && sp < 6 && (this.punch || Math.random() < 0.3);
         st.aim = bestAim;
       } else st.pop = false;

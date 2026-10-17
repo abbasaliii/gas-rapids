@@ -24,7 +24,7 @@ export class Hud {
     });
   }
   /** roles[i]: true = local human on seat i, a string = label to show (online player), false = bot */
-  setRoles(roles) { this.bars.forEach((b, i) => { const r = roles[i]; b.role.textContent = r === true ? `YOU · ${KEYMAP[i].label}` : typeof r === 'string' ? r : 'CREW'; }); }
+  setRoles(roles, active) { this.bars.forEach((b, i) => { const r = roles[i]; b.role.textContent = r === true ? `YOU · ${KEYMAP[i].label}` : typeof r === 'string' ? r : 'CREW'; b.el.style.display = active && !active[i] ? 'none' : ''; }); }
   setNames(names) { this.bars.forEach((b, i) => { const n = b.el.querySelector('.nm'); n.firstChild.textContent = names[i]; }); }
   setSpeaking(flags) { this.bars.forEach((b, i) => b.el.classList.toggle('speaking', !!flags[i])); }
   setTicks(checkpoints, length) {

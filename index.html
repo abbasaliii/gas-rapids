@@ -51,9 +51,12 @@
   <!-- level select -->
   <div id="levels" class="screen levels" hidden>
     <h1 class="h">LEVELS</h1>
-    <div id="worlds" class="worlds"></div>
+    <div class="row setup">
+      <div class="players" id="players"><span>Players</span><button data-n="1">1</button><button data-n="2">2</button><button data-n="3">3</button><button data-n="4">4</button></div>
+      <label class="opt"><input type="checkbox" id="opt-bots" checked /> Crew bots fill empty seats</label>
+    </div>
     <div class="seats" id="seats"></div>
-    <p class="hint">Press a seat's key to take it before you launch, or just go and let the crew follow your lead.</p>
+    <div id="worlds" class="worlds"></div>
     <button id="levels-back" class="btn ghost">Back</button>
   </div>
 
