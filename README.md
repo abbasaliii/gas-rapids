@@ -12,7 +12,7 @@ Everything here is original and free to use commercially: code, art (built from 
 - **1 to 4 players** on one keyboard: pick the count on the level screen and exactly that many animals sit on the raft. One sits at the back; two sit back-left and back-right; three form a triangle; four take all sides. Fewer toot-ers means less steering and no way to brake, so it gets harder. Tick "Add crew bots" if you want a full crew of four with bots in the spare seats (they drive, steer and time the hammers, traps and crushers for you).
 - **Crew**: Stinky the skunk (back seat), Porkchop the pig (right), Ribbit the frog (front), Blubber the seal (left).
 - **Feel**: every jet leaves slightly off-centre and sputters, the raft spins when hit and only weakly straightens itself, so coordination and timing matter. Tap for a punchy pop, hold for thrust.
-- **Hazards**: spiked buoys, lava pools, boulders, spinning spike rollers, fences with gaps, swinging spiked hammers, pop-up spike traps, crusher blocks, drifting logs, whirlpools, wandering twisters, erupting geysers, bank fans that blow you sideways, ice (slippery), boost currents, spiked rails.
+- **Hazards**: spiked buoys, lava pools, boulders, spinning spike rollers, fences with gaps, swinging spiked hammers, pop-up spike traps, crusher blocks, cannons that lob spiked balls across the channel, windmill spinners that bat you about, drifting logs, whirlpools, wandering twisters, erupting geysers, bank fans that blow you sideways, ice (slippery), boost currents, spiked rails.
 - **Beans**: cans of beans refill the whole crew's gas. The HUD counts them.
 - **Gas**: tap for a short pop, hold for sustained thrust. Run the bar to zero and you sputter until it recovers.
 
@@ -35,7 +35,7 @@ npm run build      # static site in dist/
 | Left | Blubber | P | O / [ |
 
 - Local co-op: press a seat's toot key on the level screen to take it; up to four on one keyboard.
-- Aim rotates your jet. On the back and front seats D steers the raft right. On the side seats D pushes the raft forward.
+- Each player has a coloured arrow on the deck showing where their toot pushes the raft. A and D turn that arrow (it stays where you leave it); D turns it clockwise. Point it, hold your toot key, and the raft goes where the arrows point. Toots from the side seats also swing the raft round, which is most of the fun and most of the chaos.
 - Gamepads: pad 1 to 4 map to seats 1 to 4. A or right trigger toots, left stick or bumpers aim.
 - Touch: tap the middle of the screen to toot, the left or right thirds to aim.
 - Esc goes back. M toggles your mic in a party.
@@ -44,7 +44,7 @@ npm run build      # static site in dist/
 
 1. **Party with friends** → type a name → **Create party**. You get a 5-letter code and an invite link.
 2. Send the link. Friends open it, type a name, **Join**. Up to four; empty seats are crew bots.
-3. Microphones turn on when entering the party (the browser asks once). 🎤 or M mutes. Avatars pulse while someone talks.
+3. The browser asks for your microphone before you create or join (say yes; without it you can hear but not talk). Each seat in the lobby shows "voice linked" once the audio link to that player is up. 🎤 or M mutes. Avatars pulse while someone talks.
 4. The host picks the level and starts. Online, everyone drives their own seat with Space + A/D (or any seat keys, gamepad, touch).
 
 How it is free: the host's browser runs the race. Each friend's browser sends button presses to the host and gets the raft state back 30 times a second over a WebRTC data channel. Voice goes browser to browser the same way. No game server. The only outside piece is a tiny signaling broker (`server/`, a Cloudflare Worker on the free plan) that introduces the browsers to each other once.

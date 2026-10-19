@@ -4,15 +4,16 @@ import { clamp } from './util.js';
 
 export const SEAT_R = 2.15;     // where the animals sit
 export const RAFT_R = 2.75;     // collision radius
-const FORCE = 7.5;              // sustained fart thrust per player (m/s^2, raft mass = 1)
-const POP = 3.6;                // impulse (m/s) for a tap
-const DRAG = 0.85;              // linear drag vs water
-const DRAG2 = 0.02;             // quadratic drag, keeps top speed sane when all four push
-const SKEW = 0.16;              // each jet leaves slightly off-centre, so a lone tooter slowly spins the raft
-const KEEL = 0.7;               // how hard the raft wants to face its motion (the original is loose and chaotic)
-const ANG_DRAG = 2.1;
-const INERTIA = 4.2;
-const AIM_MAX = 1.1;            // radians the gas jet can be aimed (enough for a two-seat crew to hold against the current)
+const FORCE = 11;               // sustained toot thrust per player (m/s^2, raft mass = 1): the raft answers within half a second
+const POP = 2.4;                // extra kick (m/s) the instant a toot starts
+const DRAG = 1.5;               // linear drag vs water: high, so letting go stops you quickly too
+const DRAG2 = 0.06;             // quadratic drag: four tooters top out near 17 m/s, one near 8
+const SKEW = 0.05;              // each jet leaves a touch off-centre so a lone tooter is never perfectly straight
+const KEEL = 1.2;               // how hard the raft wants to face its motion
+const ANG_DRAG = 3.2;
+const INERTIA = 6.5;
+const AIM_MAX = 1.2;            // radians the jet can be turned either way (about 70 degrees)
+const AIM_RATE = 2.0;           // A/D swing the jet to full in half a second; it eases back to straight when released
 const GAS_MAX = 100, DRAIN = 32, REGEN = 24, POP_COST = 9, EMPTY_LOCK = 22;
 const CAN_GAS = 45;
 
@@ -70,6 +71,12 @@ export class Raft {
     const under = new THREE.Mesh(new THREE.CylinderGeometry(SEAT_R + 0.85, SEAT_R + 0.7, 0.35, 28), new THREE.MeshLambertMaterial({ color: 0x3a6ea5 }));
     under.position.y = -0.05; g.add(under);
     const cushM = new THREE.MeshLambertMaterial({ color: 0x2f7ff0 });
+    const arrowShape = new THREE.Shape(); arrowShape.moveTo(0, 1.1); arrowShape.lineTo(0.55, 0.2); arrowShape.lineTo(0.22, 0.2); arrowShape.lineTo(0.22, -0.5); arrowShape.lineTo(-0.22, -0.5); arrowShape.lineTo(-0.22, 0.2); arrowShape.lineTo(-0.55, 0.2); arrowShape.closePath();
+    const arrowGeo = new THREE.ShapeGeometry(arrowShape);
+    this.arrows = this.seats.map((st, i) => {
+      const a = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(ROSTER[i].color), transparent: true, opacity: 0.9, depthWrite: false }));
+      a.rotation.x = -Math.PI / 2; a.position.y = 0.5; g.add(a); return a;
+    });
     this.animals = this.seats.map((st, i) => {
       const c = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.7), cushM);
       c.position.set(st.x * 1.18, 0.55, st.z * 1.18); c.rotation.y = -st.angle; c.castShadow = true; g.add(c);
@@ -107,7 +114,8 @@ export class Raft {
   jet(i) {
     const st = this.seats[i], pl = this.players[i];
     const len = Math.hypot(st.x, st.z);
-    const r = rotY(-st.x / len, -st.z / len, pl.aim * AIM_MAX * st.sign + st.skew);
+    // D (aim > 0) swings the jet anticlockwise seen from above, which on every seat makes the raft turn RIGHT (torque = -R F sin(aim))
+    const r = rotY(-st.x / len, -st.z / len, pl.aim * AIM_MAX + st.skew);
     return { uw: rotY(r.x, r.z, this.yaw), rw: rotY(st.x, st.z, this.yaw) };
   }
 
@@ -123,7 +131,9 @@ export class Raft {
     for (let i = 0; i < this.players.length; i++) {
       const pl = this.players[i], inp = inputs[i] || {};
       pl.cooldown = Math.max(0, pl.cooldown - dt);
-      pl.aim += (clamp(inp.aim || 0, -1, 1) - pl.aim) * Math.min(1, dt * 12);
+      // bots hand in an absolute aim; people turn their jet with A/D and it stays where they leave it
+      if (inp.abs) pl.aim += (clamp(inp.aim || 0, -1, 1) - pl.aim) * Math.min(1, dt * 10);
+      else { const want = clamp(inp.aim || 0, -1, 1); if (want) pl.aim = clamp(pl.aim + want * AIM_RATE * dt, -1, 1); else pl.aim -= Math.sign(pl.aim) * Math.min(Math.abs(pl.aim), AIM_RATE * 1.5 * dt); }
       const want = !!inp.fart && !this.finished;
       let farting = false;
       if (want && !pl.empty && pl.gas > 0) {
@@ -139,15 +149,15 @@ export class Raft {
       }
       if (farting !== pl.farting) { pl.farting = farting; farting ? this.audio.fartStart(i) : this.audio.fartStop(i); }
       this.animals[i].setFart(farting);
-      pl.thrust += ((farting ? 1 : 0) - pl.thrust) * Math.min(1, dt * (farting ? 9 : 14));
+      pl.thrust += ((farting ? 1 : 0) - pl.thrust) * Math.min(1, dt * (farting ? 16 : 20));
       if (pl.thrust < 0.02) continue;
       const { uw, rw } = this.jet(i);
-      const flutter = 1 + Math.sin(time * 31 + i * 1.7) * 0.18 + Math.sin(time * 7.3 + i) * 0.1; // the thrust sputters
+      const flutter = 1 + Math.sin(time * 31 + i * 1.7) * 0.12 + Math.sin(time * 7.3 + i) * 0.06; // the thrust sputters a little
       const F = FORCE * pl.thrust * flutter;
       fx += uw.x * F; fz += uw.z * F;
       torque += (rw.z * uw.x - rw.x * uw.z) * F;
       if (!farting) continue;
-      if (pl.pop) { this.vx += uw.x * POP; this.vz += uw.z * POP; this.av += (rw.z * uw.x - rw.x * uw.z) * POP * 0.6 / INERTIA; this.bump = Math.max(this.bump, 0.35); this.audio.pop(i); }
+      if (pl.pop) { this.vx += uw.x * POP; this.vz += uw.z * POP; this.av += (rw.z * uw.x - rw.x * uw.z) * POP * 0.5 / INERTIA; this.bump = Math.max(this.bump, 0.3); this.recoil = 0.25; this.audio.pop(i); }
       this.emitGas(i, dt, pl.pop);
     }
     const near = T.nearest(this.x, this.z, this.hint);
@@ -315,5 +325,18 @@ export class Raft {
     this.body.rotation.y = this.av * -0.02;
     this.body.position.y = Math.sin(t * 2.1) * 0.05 - this.bump * 0.15 + (this.finished ? Math.abs(Math.sin(t * 6)) * 0.3 : 0);
     for (const a of this.animals) { a.setCheer(this.finished); a.update(t); }
+    // recoil: the raft dips away from a fresh toot
+    this.recoil = Math.max(0, (this.recoil || 0) - dt * 2);
+    this.body.position.y -= this.recoil * 0.12;
+    // aim arrows: show where each seat's toot pushes the raft
+    this.seats.forEach((st, i) => {
+      const pl = this.players[i], a = this.arrows[i];
+      const len = Math.hypot(st.x, st.z);
+      const r = rotY(-st.x / len, -st.z / len, pl.aim * AIM_MAX + st.skew);
+      a.position.set(st.x * 0.62 + r.x * 0.2, 0.5, st.z * 0.62 + r.z * 0.2);
+      a.rotation.z = Math.atan2(r.x, r.z) + Math.PI; // ShapeGeometry points +y, the mesh lies flat: +y maps to -z
+      const s = pl.farting ? 1.25 : 1;
+      a.scale.set(s, s, 1); a.material.opacity = pl.farting ? 1 : 0.75;
+    });
   }
 }

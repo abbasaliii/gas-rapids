@@ -66,7 +66,7 @@ export class Bots {
       saw = true;
       if (aheadD < 2) { this.punch = true; this.brakeSince = null; break; } // already in it: never reverse back in, get clear
       // we do not know how fast the punch will carry us, so the window must be clear for a slow and a fast crossing
-      const tIn = Math.max(0, aheadD - h.span) / Math.max(sp, 9.5), tOut = (aheadD + h.span) / Math.max(sp, 5.5);
+      const tIn = Math.max(0, aheadD - h.span) / (Math.max(sp, 6) + 8), tOut = (aheadD + h.span) / Math.max(sp, 5.5); // the punch accelerates us, so we may arrive early
       let safe = h.kind !== 'crusher' || Math.abs(raft.lat) < 2.2; // crushers: only the middle is safe
       for (let tt = tIn; safe && tt <= tOut + 0.05; tt += 0.1) if (!h.safe(t + tt)) { safe = false; break; }
       if (!safe && this.brakeSince != null && t - this.brakeSince > 5 && h.safe(t + tIn) && h.safe(t + tOut)) safe = true;
@@ -90,8 +90,8 @@ export class Bots {
         const len = Math.hypot(seat.x, seat.z);
         const ux = -seat.x / len, uz = -seat.z / len;
         let best = -2, bestAim = 0;
-        for (const aim of [-1, -0.5, 0, 0.5, 1]) {
-          const r = rotY(ux, uz, aim * 1.1 * seat.sign + seat.skew);
+        for (const aim of [-1, -0.7, -0.4, -0.2, 0, 0.2, 0.4, 0.7, 1]) {
+          const r = rotY(ux, uz, aim * 1.2 + seat.skew);
           const w = rotY(r.x, r.z, raft.yaw);
           let score = w.x * dx + w.z * dz;
           const rw = rotY(seat.x, seat.z, raft.yaw);
@@ -106,7 +106,7 @@ export class Bots {
         st.pop = st.fart && best > 0.8 && sp < 6 && (this.punch || Math.random() < 0.3);
         st.aim = bestAim;
       } else st.pop = false;
-      out.push({ fart: st.fart, aim: st.aim, pop: st.pop, free: this.braking });
+      out.push({ fart: st.fart, aim: st.aim, pop: st.pop, free: this.braking, abs: true });
     }
     return out;
   }

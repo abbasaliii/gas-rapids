@@ -201,7 +201,7 @@ export function buildTrack(level) {
   const checkpoints = [];
   const boosts = [], ices = [];
   let finishD = length - 10;
-  const rollers = [], hammers = [], logs = [], whirls = [], geysers = [], cans = [], lavas = [], traps = [], crushers = [], twisters = [], fans = [];
+  const rollers = [], hammers = [], logs = [], whirls = [], geysers = [], cans = [], lavas = [], traps = [], crushers = [], twisters = [], fans = [], cannons = [], spinners = [];
   const timed = []; // {d, span, safe(t)} hazards the crew must time
 
   const archMat = flat(0xff8a3d);
@@ -319,7 +319,7 @@ export function buildTrack(level) {
       obstacles.push(ob);
       const hm = { pivot, ob, s, period: f.period || 3, phase: f.phase || 0, arm, h };
       hammers.push(hm); ob.timed = true;
-      timed.push({ d: f.d, span: 4, kind: 'hammer', safe: (t) => Math.abs(1.3 * Math.sin((t * Math.PI * 2) / hm.period + hm.phase)) >= 0.26 });
+      timed.push({ d: f.d, span: 4, kind: 'hammer', safe: (t) => Math.abs(1.3 * Math.sin((t * Math.PI * 2) / hm.period + hm.phase)) >= 0.22 });
     } else if (f.type === 'log') {
       const len = f.len || 5;
       const g = new THREE.Group();
@@ -434,6 +434,35 @@ export function buildTrack(level) {
       const streakM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 });
       for (let dd = d0; dd < d1; dd += 5) { const ss = at(dd); const st = new THREE.Mesh(new THREE.PlaneGeometry(ss.w * 1.6, 0.14), streakM); st.rotation.x = -Math.PI / 2; st.rotation.z = yawAt(dd); st.position.set(ss.x, 0.04, ss.z); group.add(st); }
       fans.push({ blades });
+    } else if (f.type === 'cannon') {
+      // a cannon on one bank lobs a spiked ball straight across the channel every `period` seconds
+      const sign = f.side === 'L' ? 1 : -1;
+      const from = posAt(f.d, sign * (s.w + 1.2)), to = posAt(f.d, -sign * (s.w + 1.2));
+      const g = new THREE.Group();
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, 2.4, 10), flat(0x2b2b33)); barrel.rotation.z = Math.PI / 2; barrel.position.set(-sign * 0.6, 1.6, 0); g.add(barrel);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(2, 1.2, 2), flat(0x6e4521)); base.position.y = 0.6; g.add(base);
+      g.position.set(from.x, H, from.z); g.rotation.y = yawAt(f.d); group.add(g);
+      const ball = new THREE.Group();
+      const core = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8), ballM); core.castShadow = true; ball.add(core);
+      for (let k = 0; k < 8; k++) { const sp = new THREE.Mesh(miniSpike, spikeMat); const a = (k / 8) * Math.PI * 2; sp.position.set(Math.cos(a) * 0.85, Math.sin(a) * 0.85, 0); sp.rotation.z = a - Math.PI / 2; ball.add(sp); }
+      ball.visible = false; group.add(ball);
+      const ob = { type: 'circle', lethal: true, x: from.x, z: from.z, r: 0, kind: 'cannon', timed: true };
+      obstacles.push(ob);
+      const cn = { ball, ob, from, to, period: f.period || 4, phase: f.phase || 0, flight: 1.3, s };
+      cannons.push(cn);
+      timed.push({ d: f.d, span: 3, kind: 'cannon', safe: (t) => { const ph = ((t + cn.phase) % cn.period) / cn.period; return ph > cn.flight / cn.period + 0.05 || ph < 0.02; } });
+    } else if (f.type === 'spinner') {
+      // a bar pinned in mid-channel that turns like a windmill: not deadly, but it bats you about
+      const len = f.len || 6;
+      const p = posAt(f.d, usable(f.lat || 0));
+      const g = new THREE.Group();
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 1, 10), flat(0x2b2b33)); hub.position.y = 0.4; g.add(hub);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(len, 0.6, 0.6), flat(0xff8a3d)); bar.position.y = 0.7; bar.castShadow = true; g.add(bar);
+      for (const e of [-1, 1]) { const cap = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), flat(0xffd23f)); cap.position.set(e * len / 2, 0.7, 0); g.add(cap); }
+      g.position.copy(p); group.add(g);
+      const ob = { type: 'segment', lethal: false, ax: p.x, az: p.z, bx: p.x, bz: p.z, r: 0.5, kind: 'spinner' };
+      obstacles.push(ob);
+      spinners.push({ g, ob, p, len, speed: f.speed || 1.2 });
     } else if (f.type === 'checkpoint') {
       checkpoints.push(f.d);
       arch(f.d, textTexture('CHECKPOINT', { bg: '#ffd23f', font: 'bold 78px "Lilita One", "Archivo", sans-serif' }), { h: 6.5, bannerW: 9, bannerH: 2.2 });
@@ -474,7 +503,7 @@ export function buildTrack(level) {
       const lat = -Math.sin(ang) * h.arm;   // local +x is the raft's right = negative lateral
       const height = h.h - 0.5 - Math.cos(ang) * h.arm;
       h.ob.x = h.s.x + h.s.lx * lat; h.ob.z = h.s.z + h.s.lz * lat;
-      h.ob.active = height < 3.0; h.ob.r = h.ob.active ? 1.5 : 0;
+      h.ob.active = height < 2.7; h.ob.r = h.ob.active ? 1.5 : 0;
     }
     for (const l of logs) {
       const lat = Math.sin(t * l.speed * 0.6 + l.phase) * l.range;
@@ -511,6 +540,21 @@ export function buildTrack(level) {
       tw.g.position.set(tw.field.x, 0, tw.field.z); tw.swirl.rotation.z = -t * 1.8;
     }
     for (const fn of fans) fn.blades.rotation.z = t * 9;
+    for (const cn of cannons) {
+      const ph = ((t + cn.phase) % cn.period);
+      if (ph < cn.flight) {
+        const k = ph / cn.flight;
+        const x = cn.from.x + (cn.to.x - cn.from.x) * k, z = cn.from.z + (cn.to.z - cn.from.z) * k;
+        cn.ball.visible = true; cn.ball.position.set(x, 1.4 + Math.sin(k * Math.PI) * 1.2, z); cn.ball.rotation.z = t * 8;
+        cn.ob.x = x; cn.ob.z = z; cn.ob.r = 1.3;
+      } else { cn.ball.visible = false; cn.ob.r = 0; }
+    }
+    for (const sp of spinners) {
+      const a = t * sp.speed;
+      sp.g.rotation.y = a;
+      const hx = Math.cos(a) * sp.len / 2, hz = -Math.sin(a) * sp.len / 2;
+      sp.ob.ax = sp.p.x - hx; sp.ob.az = sp.p.z - hz; sp.ob.bx = sp.p.x + hx; sp.ob.bz = sp.p.z + hz;
+    }
     for (const c of cans) if (!c.taken) { c.mesh.position.y = 1.1 + Math.sin(t * 2.5 + c.phase) * 0.15; c.mesh.rotation.y = t * 1.2; }
     for (const l of lavas) l.core.scale.setScalar(1 + 0.12 * Math.sin(t * 3 + l.phase));
     for (const c of clouds) c.position.x += c.userData.v * dt;

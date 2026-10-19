@@ -121,56 +121,84 @@ export class Net {
   }
 }
 
-/** Voice mesh. The peer with the smaller id places the call so each pair has exactly one call. */
+/**
+ * Voice mesh. Every pair of players has exactly one call: the peer with the smaller id places it, and if nothing
+ * arrives within a few seconds the other side places one instead. The mic is requested before the party connects,
+ * so calls always carry the real track; a player who refuses the mic still hears everyone.
+ */
 class Voice {
   constructor(net) {
-    this.net = net; this.stream = null; this.calls = new Map(); // peerId -> {call, audio, analyser}
-    this.muted = false; this.ctx = null; this.silent = null; this.levels = new Map(); this.speaking = new Set();
+    this.net = net; this.stream = null; this.calls = new Map(); // peerId -> {call, audio, since, got}
+    this.muted = false; this.ctx = null; this.levels = new Map(); this.speaking = new Set(); this.denied = false;
+    // browsers may refuse to start audio until the page is touched; retry every element on the next gesture
+    const kick = () => { for (const e of this.calls.values()) if (e.audio.srcObject) e.audio.play().catch(() => {}); if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); };
+    window.addEventListener('pointerdown', kick); window.addEventListener('keydown', kick);
   }
   async enable() {
     if (this.stream) return true;
-    try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      this.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
-      this._meter('me', this.stream);
-      // swap the real mic into any call that started with the silent placeholder
-      for (const { call } of this.calls.values()) this._replaceTrack(call);
-      return true;
-    } catch (e) { this.net.emit('error', new Error('Microphone blocked: ' + e.message)); return false; }
+    if (!this.pending) {
+      this.pending = navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+        .then((stream) => {
+          this.stream = stream; this.pending = null;
+          this.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+          this._meter('me', stream);
+          for (const e of this.calls.values()) this._sendTrack(e.call); // calls made before the mic arrived get the real track now
+          if (this.muted) this.setMuted(true);
+          this.net.emit('mic', true);
+          return true;
+        })
+        .catch((e) => { this.pending = null; this.denied = true; this.net.emit('error', new Error('Microphone blocked: ' + e.message)); this.net.emit('mic', false); return false; });
+    }
+    // do not hold the party hostage to the permission prompt: carry on after 8 s and attach the mic when it arrives
+    return Promise.race([this.pending, new Promise((res) => setTimeout(() => res(null), 8000))]);
   }
-  _silentStream() {
-    this.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
-    if (!this.silent) { const dst = this.ctx.createMediaStreamDestination(); this.silent = dst.stream; }
-    return this.silent;
-  }
-  _replaceTrack(call) {
-    const pc = call.peerConnection; if (!pc) return;
-    const track = this.stream?.getAudioTracks()[0]; if (!track) return;
-    const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
-    if (sender) sender.replaceTrack(track);
+  _sendTrack(call) {
+    const pc = call.peerConnection; if (!pc || !this.stream) return;
+    const track = this.stream.getAudioTracks()[0]; if (!track) return;
+    const sender = pc.getSenders().find((x) => x.track && x.track.kind === 'audio');
+    if (sender) { if (sender.track !== track) sender.replaceTrack(track); }
+    else pc.addTrack(track, this.stream);
   }
   setMuted(m) { this.muted = m; if (this.stream) for (const t of this.stream.getAudioTracks()) t.enabled = !m; }
-  /** call everyone we should be calling (called whenever the lobby changes) */
+  /** place calls to everyone we should be calling (called whenever the lobby changes and on a timer) */
   sync() {
-    const me = this.net.peer?.id; if (!me) return;
+    const me = this.net.peer?.id; if (!me || !this.net.peer.open) return;
+    const now = performance.now();
     for (const id of this.net.others()) {
-      if (this.calls.has(id) || id > me) continue; // the smaller id calls
-      const call = this.net.peer.call(id, this.stream || this._silentStream());
+      const e = this.calls.get(id);
+      if (e) {
+        // no audio after 7 s: tear down and let either side try again
+        if (!e.got && now - e.since > 7000) { this.drop(id); }
+        continue;
+      }
+      const iCall = id > me ? false : true;
+      const lateFallback = this.waiting && this.waiting.get(id) && now - this.waiting.get(id) > 4000;
+      if (!iCall && !lateFallback) { (this.waiting ||= new Map()).set(id, this.waiting.get(id) || now); continue; }
+      const call = this.net.peer.call(id, this.stream || this._silence());
       if (call) this._attach(id, call);
     }
   }
+  _silence() {
+    this.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (!this.silent) this.silent = this.ctx.createMediaStreamDestination().stream;
+    return this.silent;
+  }
   answer(call) {
-    call.answer(this.stream || this._silentStream());
+    const old = this.calls.get(call.peer);
+    if (old) this.drop(call.peer); // a fresh call from them replaces whatever we had
+    call.answer(this.stream || this._silence());
     this._attach(call.peer, call);
   }
   _attach(id, call) {
-    const audio = document.createElement('audio'); audio.autoplay = true; audio.playsInline = true;
+    const audio = document.createElement('audio'); audio.autoplay = true; audio.playsInline = true; audio.volume = 1;
     document.body.appendChild(audio);
-    const entry = { call, audio };
+    const entry = { call, audio, since: performance.now(), got: false };
     this.calls.set(id, entry);
-    call.on('stream', (s) => { audio.srcObject = s; audio.play().catch(() => {}); this._meter(id, s); });
+    if (this.waiting) this.waiting.delete(id);
+    call.on('stream', (s) => { entry.got = true; audio.srcObject = s; audio.play().catch(() => {}); this._meter(id, s); this.net.emit('voice', { id, ok: true }); });
     call.on('close', () => this.drop(id));
     call.on('error', () => this.drop(id));
+    if (call.peerConnection) call.peerConnection.addEventListener('connectionstatechange', () => { const st = call.peerConnection.connectionState; if (st === 'failed' || st === 'disconnected') this.drop(id); });
   }
   _meter(id, stream) {
     try {
@@ -190,14 +218,16 @@ class Voice {
     }
     return this.speaking;
   }
+  /** which party members we currently receive audio from */
+  connectedTo(id) { const e = this.calls.get(id); return !!(e && e.got); }
   drop(id) {
     const e = this.calls.get(id); if (!e) return;
     try { e.call.close(); } catch {}
-    e.audio.remove(); this.calls.delete(id); this.levels.delete(id);
+    e.audio.srcObject = null; e.audio.remove(); this.calls.delete(id); this.levels.delete(id);
   }
   stop() {
     for (const id of [...this.calls.keys()]) this.drop(id);
     if (this.stream) for (const t of this.stream.getTracks()) t.stop();
-    this.stream = null; this.levels.clear();
+    this.stream = null; this.levels.clear(); this.waiting = null;
   }
 }

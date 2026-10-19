@@ -236,13 +236,19 @@ async function enterLobby() {
   ui.lobbyStart.hidden = net.role !== 'host';
   ui.lobbyLevel.value = String(net.level);
   renderLobby();
-  const ok = await net.voice.enable();
-  setMicUi(ok ? !net.voice.muted : null);
   net.voice.sync();
 }
+/** ask for the mic before connecting so every call carries the real track from the start */
+async function micFirst() {
+  ui.partyErr.textContent = 'Asking for your microphone…';
+  const ok = await net.voice.enable();
+  setMicUi(ok ? !net.voice.muted : null);
+  ui.partyErr.textContent = ok ? '' : ok === null ? 'Still waiting for the microphone prompt: allow it and your voice joins automatically.' : 'No microphone: you will hear the others but they will not hear you.';
+}
+net.on('mic', (ok) => { setMicUi(ok ? !net.voice.muted : null); if (mode === 'party') { partyError(''); renderLobby(); } });
 ui.host.addEventListener('click', async () => {
   partyError(''); ui.host.disabled = true;
-  try { await net.host(myName()); await enterLobby(); }
+  try { await micFirst(); await net.host(myName()); await enterLobby(); }
   catch (e) { partyError('Could not reach the party service: ' + (e.message || e.type || e)); net.leave(); }
   ui.host.disabled = false;
 });
@@ -250,7 +256,7 @@ ui.join.addEventListener('click', async () => {
   const code = ui.pcode.value.trim().toUpperCase();
   if (code.length < 5) return partyError('Enter the 5-letter party code.');
   partyError(''); ui.join.disabled = true;
-  try { await net.join(code, myName()); await enterLobby(); }
+  try { await micFirst(); await net.join(code, myName()); await enterLobby(); }
   catch (e) { partyError(e.message || 'Could not join'); net.leave(); }
   ui.join.disabled = false;
 });
@@ -272,9 +278,10 @@ function renderLobby() {
     const s = net.seats[i];
     const mine = s && net.peer && s.id === net.peer.id;
     const talking = s && (mine ? speaking.has('me') : speaking.has(s.id));
+    const voice = !s ? '' : mine ? (net.voice.stream ? '🎤 mic on' : '🔇 no mic') : net.voice.connectedTo(s.id) ? '🔊 voice linked' : '⏳ linking voice…';
     return `<div class="seat ${s ? 'human' : ''} ${mine ? 'me' : ''} ${talking ? 'speaking' : ''}" style="--c:${r.color}">
       <div class="face">${r.emoji}</div><div class="who">${r.name}</div>
-      <div class="name">${s ? s.name + (mine ? ' (you)' : '') : 'empty'}</div></div>`;
+      <div class="name">${s ? s.name + (mine ? ' (you)' : '') : 'empty'}</div><div class="role">${voice}</div></div>`;
   }).join('');
   const n = net.seats.filter(Boolean).length;
   ui.lobbyStatus.textContent = net.role === 'host'
@@ -286,6 +293,8 @@ function hostStart() { net.crew = Math.max(1, net.seats.filter(Boolean).length);
 ui.lobbyStart.addEventListener('click', hostStart);
 
 net.on('lobby', () => { if (mode === 'party') renderLobby(); net.voice.sync(); if (G && G.online) G.hud.setNames(net.seats.map((s, i) => (s ? s.name : ROSTER[i].name))); });
+net.on('voice', () => { if (mode === 'party') renderLobby(); });
+setInterval(() => { if (net.connected) net.voice.sync(); }, 2500);
 net.on('welcome', () => { ui.lobby.hidden = false; });
 net.on('full', () => partyError('That party is full.'));
 net.on('start', (d) => { net.level = d.level; net.crew = d.crew || 4; startGame({ online: 'client' }); });
@@ -297,7 +306,7 @@ net.on('ev', (d) => {
   if (d.e === 'bump') { audio.bump(d.k); effects.splash(G.raft.x, G.raft.z, 8); }
   if (d.e === 'geyser') { audio.geyser(); effects.shake = 1; }
   if (d.e === 'can') G.hud.toast('BEANS!');
-  if (d.e === 'cd') { G.hud.countdown(d.v); if (d.v) audio.beep(d.v === 'GO!'); if (d.v === 'GO!') { G.hud.hint('HOLD SPACE (or tap) TO TOOT · A / D TO AIM'); setTimeout(() => G && G.hud.hint(''), 9000); } }
+  if (d.e === 'cd') { G.hud.countdown(d.v); if (d.v) audio.beep(d.v === 'GO!'); if (d.v === 'GO!') { G.hud.hint('HOLD SPACE TO TOOT · A / D TURN YOUR ARROW'); setTimeout(() => G && G.hud.hint(''), 9000); } }
   if (d.e === 'finish') { audio.fanfare(); audio.stopMusic(); G.hud.toast('FINISH!'); effects.confetti(G.raft.x, G.raft.z, 90); }
 });
 net.on('end', (d) => { if (G && G.online === 'client') { G.time = d.time; G.raft.cans = d.cans || 0; setTimeout(() => { if (G && G.online === 'client') showFinish(d.time, d.retries, true); }, 1700); } });
@@ -331,12 +340,19 @@ function updateCamera(dt) {
 // ---------------------------------------------------------------- loop
 const FIXED = 1 / 120;
 let acc = 0, last = performance.now(), voiceT = 0;
+// adaptive quality: if frames come in slow for a while, drop resolution then shadows, so motion stays smooth
+let quality = 2, slowFrames = 0, qualityT = 0;
+function lowerQuality() {
+  if (quality === 2) { quality = 1; renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25)); sun.shadow.mapSize.set(1024, 1024); sun.shadow.map && sun.shadow.map.dispose(); sun.shadow.map = null; }
+  else if (quality === 1) { quality = 0; renderer.setPixelRatio(1); renderer.shadowMap.enabled = false; sun.castShadow = false; }
+}
 function frame(now) { requestAnimationFrame(frame); tick(now); }
 // debug/automation hook: window.tootRiver.tick(seconds) advances the game without waiting for rAF
 window.tootRiver = { tick(sec = 1, fps = 60) { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) tick(last + 1000 / fps, i === n - 1); }, get state() { return G; }, startGame, net, setLevel(i) { selectedLevel = i; }, prog, LEVELS };
 function tick(now, render = true) {
   let dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = Math.max(last, now);
   clock += dt;
+  if (render && mode === 'game') { if (dt > 1 / 40) slowFrames++; qualityT += dt; if (qualityT > 3) { if (slowFrames > 45 && quality > 0) lowerQuality(); slowFrames = 0; qualityT = 0; } }
   voiceT += dt;
   if (net.connected && voiceT > 0.12) {
     voiceT = 0;
@@ -359,7 +375,7 @@ function tick(now, render = true) {
         const n = Math.ceil(G.cd);
         const label = n > 0 ? String(n) : 'GO!';
         if (label !== G.cdShown) { G.cdShown = label; hud.countdown(label); audio.beep(n <= 0); if (G.online === 'host') net.broadcast({ t: 'ev', e: 'cd', v: label }); }
-        if (G.cd <= 0) { G.phase = 'race'; G.hintT = 12; hud.hint(G.online ? 'HOLD SPACE (or tap) TO TOOT · A / D TO AIM' : players > 1 ? 'EVERYONE: HOLD YOUR TOOT KEY · AIM WITH YOUR SIDE KEYS' : 'HOLD SPACE TO TOOT · A / D TO AIM'); }
+        if (G.cd <= 0) { G.phase = 'race'; G.hintT = 12; hud.hint(G.online ? 'HOLD SPACE TO TOOT · A / D TURN YOUR ARROW' : players > 1 ? 'HOLD YOUR TOOT KEY · SIDE KEYS TURN YOUR ARROW · THE RAFT GOES WHERE THE ARROWS POINT' : 'HOLD SPACE TO TOOT · A / D TURN YOUR ARROW · THE RAFT GOES WHERE IT POINTS'); }
         if (G.cd < -0.9) { hud.countdown(''); if (G.online === 'host') net.broadcast({ t: 'ev', e: 'cd', v: '' }); }
       } else if (G.phase === 'race' || G.phase === 'finished') {
         if (G.phase === 'race') G.time += dt;

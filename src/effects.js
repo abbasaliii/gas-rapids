@@ -12,7 +12,7 @@ export class Effects {
     this.splashMat = new THREE.SpriteMaterial({ map: puff, color: 0xffffff, transparent: true, depthWrite: false });
     this.sparkMat = new THREE.SpriteMaterial({ map: puff, color: 0xffd23f, transparent: true, depthWrite: false });
     this.confettiMats = [0xff4fa3, 0xffd23f, 0x5fd400, 0x2f7ff0, 0xff6a1f, 0xffffff].map((c) => new THREE.SpriteMaterial({ map: puff, color: c, transparent: true, depthWrite: false }));
-    for (let i = 0; i < 320; i++) {
+    for (let i = 0; i < 700; i++) {
       const s = new THREE.Sprite(this.gasMat);
       s.visible = false; scene.add(s);
       this.pool.push({ s, life: 0, max: 1, vx: 0, vy: 0, vz: 0, grow: 1, kind: 'gas' });
@@ -31,16 +31,18 @@ export class Effects {
     const p = this.pool.find((p) => p.life <= 0);
     if (!p) return;
     p.kind = kind; p.life = life; p.max = life; p.vx = vx; p.vy = vy; p.vz = vz; p.grow = size;
-    p.s.material = mat; p.s.position.set(x, y, z); p.s.scale.setScalar(size * 0.5); p.s.visible = true;
-    p.s.material.rotation = Math.random() * 6.28;
+    if (!p.own || p.own.map !== mat.map || p.ownBase !== mat) { p.own = mat.clone(); p.ownBase = mat; }
+    p.s.material = p.own; p.s.position.set(x, y, z); p.s.scale.setScalar(size * 0.5); p.s.visible = true;
+    p.s.material.rotation = Math.random() * 6.28; p.s.material.opacity = mat.opacity;
   }
   gas(x, z, dx, dz, strength = 1) {
-    const n = 1 + Math.floor(strength);
+    // a thick stream: two fat blobs per call, flung out fast, then they slow, swell and hang around
+    const n = 2 + Math.floor(strength);
     for (let i = 0; i < n; i++) {
-      const sp = 5 + Math.random() * 3 + strength;
-      const jx = (Math.random() - 0.5) * 2.2, jz = (Math.random() - 0.5) * 2.2;
-      this.spawn('gas', x + (Math.random() - 0.5) * 0.4, 0.9 + Math.random() * 0.4, z + (Math.random() - 0.5) * 0.4,
-        dx * sp + jx, 0.8 + Math.random() * 0.8, dz * sp + jz, 1.1 + Math.random() * 0.6 + strength * 0.15, 0.8 + Math.random() * 0.4,
+      const sp = 7 + Math.random() * 4 + strength * 1.5;
+      const jx = (Math.random() - 0.5) * 2.6, jz = (Math.random() - 0.5) * 2.6;
+      this.spawn('gas', x + (Math.random() - 0.5) * 0.6, 0.8 + Math.random() * 0.6, z + (Math.random() - 0.5) * 0.6,
+        dx * sp + jx, 0.4 + Math.random() * 0.9, dz * sp + jz, 2.0 + Math.random() * 1.2 + strength * 0.3, 1.3 + Math.random() * 0.5,
         Math.random() < 0.6 ? this.gasMat : this.gasMat2);
     }
   }
@@ -83,7 +85,7 @@ export class Effects {
       if (p.life <= 0) { p.s.visible = false; continue; }
       const k = 1 - p.life / p.max;
       p.s.position.x += p.vx * dt; p.s.position.y += p.vy * dt; p.s.position.z += p.vz * dt;
-      if (p.kind === 'gas') { p.vx *= 1 - dt * 2.2; p.vz *= 1 - dt * 2.2; p.vy += dt * 0.6; p.s.scale.setScalar(p.grow * (0.5 + k * 1.6)); p.s.material.opacity = 0.85 * (1 - k) ** 1.2; }
+      if (p.kind === 'gas') { p.vx *= 1 - dt * 3; p.vz *= 1 - dt * 3; p.vy += dt * 0.5; p.s.scale.setScalar(p.grow * (0.45 + Math.min(1, k * 2.2) * 1.3)); p.s.material.opacity = 0.9 * (1 - k) ** 1.4; }
       else if (p.kind === 'spark') { p.vy -= 6 * dt; p.s.scale.setScalar(p.grow * (1 - k)); }
       else if (p.kind === 'confetti') { p.vy -= 12 * dt; p.vx *= 1 - dt; p.vz *= 1 - dt; p.s.scale.set(p.grow * (0.6 + 0.4 * Math.sin(k * 40)), p.grow, 1); if (p.s.position.y < 0.1) p.s.position.y = 0.1; }
       else { p.vy -= 22 * dt; p.s.scale.setScalar(p.grow * (1 - k * 0.5)); if (p.s.position.y < 0) { p.life = 0; p.s.visible = false; } }
