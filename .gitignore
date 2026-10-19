@@ -2,3 +2,4 @@ node_modules
 dist
 .wrangler
 toot-river-itch.zip
+marketing/*.mp4
