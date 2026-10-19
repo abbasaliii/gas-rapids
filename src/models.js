@@ -4,7 +4,6 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 /**
  * Character models (all free to use commercially; credits in the Credits panel):
  *   pig      Quaternius, CC0           (animated)
- *   raccoon  Quaternius, CC0           (animated)
  *   skunk    Poly by Google, CC-BY 3.0
  *   frog     Poly by Google, CC-BY 3.0
  *   seal     Poly by Google, CC-BY 3.0
@@ -15,7 +14,6 @@ export const MODELS = {
   pig: { file: 'pig_quaternius.glb', height: 1.9, yaw: Math.PI, lift: 0, anim: /idle/i },
   frog: { file: 'frog_google.glb', height: 1.5, yaw: Math.PI, lift: 0 },
   seal: { file: 'seal_google.glb', height: 2.0, yaw: Math.PI, lift: 0 },
-  raccoon: { file: 'raccoon_quaternius.glb', height: 1.3, yaw: Math.PI, lift: 0, anim: /idle/i },
 };
 
 const loader = new GLTFLoader();
