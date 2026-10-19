@@ -13,6 +13,16 @@ import { fmtTime } from './util.js';
 import { dailyLevel, todayKey } from './daily.js';
 
 const BROKER_URL = 'https://' + (import.meta.env.VITE_PEER_HOST || 'toot-river-broker.gas-rapids.workers.dev');
+const VERSION = '0.9.0';
+// crash reports go to our own broker (no third party); a few per session at most
+let reported = 0;
+function report(msg, stack, where) {
+  if (reported++ >= 5 || !navigator.onLine) return;
+  try { fetch(`${BROKER_URL}/log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg, stack, where, ua: navigator.userAgent, v: VERSION }), keepalive: true }).catch(() => {}); } catch {}
+}
+addEventListener('error', (e) => report(e.message, e.error && e.error.stack, `${e.filename}:${e.lineno}`));
+addEventListener('unhandledrejection', (e) => report('unhandled: ' + (e.reason && (e.reason.message || e.reason)), e.reason && e.reason.stack, location.pathname));
+const countPlay = (level, online, crew) => { try { fetch(`${BROKER_URL}/stats/play`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ level, online: !!online, crew }), keepalive: true }).catch(() => {}); } catch {} };
 
 // ---------------------------------------------------------------- renderer
 const canvas = document.getElementById('game');
@@ -171,6 +181,7 @@ function startGame(opts = {}) {
   if (online === 'client') { raft.predicting = true; G.pred = { seq: 0, buf: [], acc: 0, others: null }; }
   else { hud.setRoles(localRoles()); ui.micHud.hidden = true; }
   hud.toast(idx === 'daily' ? 'DAILY RIVER' : `${idx + 1}. ${level.name.toUpperCase()}`);
+  if (online !== 'client') countPlay(idx, online, raft.count);
   audio.stopMusic(); audio.startMusic('race');
   show(null);
   mode = 'game';
@@ -411,7 +422,20 @@ function updateCamera(dt) {
 const FIXED = 1 / 120;
 let acc = 0, last = performance.now(), voiceT = 0;
 // adaptive quality: if frames come in slow for a while, drop resolution then shadows, so motion stays smooth
-let quality = 2, slowFrames = 0, qualityT = 0;
+let quality = 2, slowFrames = 0, qualityT = 0, qualityMode = 'auto';
+try { qualityMode = localStorage.getItem('tootriver-quality') || 'auto'; } catch {}
+function applyQualityMode(m) {
+  qualityMode = m; try { localStorage.setItem('tootriver-quality', m); } catch {}
+  if (m === 'low') { quality = 1; lowerQuality(); }
+  else { quality = 2; renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true; sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
+  if (m === 'low' && matchMedia('(pointer: coarse)').matches) effects.budget = 0.5;
+}
+$('opt-quality').value = qualityMode;
+$('opt-quality').addEventListener('change', (e) => applyQualityMode(e.target.value));
+$('settings-open').addEventListener('click', () => { $('settings').hidden = false; });
+$('settings-close').addEventListener('click', () => { $('settings').hidden = true; });
+$('reset-progress').addEventListener('click', () => { prog = {}; saveProg(); if (mode === 'levels') renderLevels(); $('settings').hidden = true; });
+if (qualityMode === 'low') applyQualityMode('low');
 function lowerQuality() {
   if (quality === 2) { quality = 1; renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25)); sun.shadow.mapSize.set(1024, 1024); sun.shadow.map && sun.shadow.map.dispose(); sun.shadow.map = null; }
   else if (quality === 1) { quality = 0; renderer.setPixelRatio(1); renderer.shadowMap.enabled = false; sun.castShadow = false; }
@@ -422,7 +446,7 @@ window.tootRiver = { tick(sec = 1, fps = 60) { const n = Math.round(sec * fps); 
 function tick(now, render = true) {
   let dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = Math.max(last, now);
   clock += dt;
-  if (render && mode === 'game') { if (dt > 1 / 40) slowFrames++; qualityT += dt; if (qualityT > 3) { if (slowFrames > 45 && quality > 0) lowerQuality(); slowFrames = 0; qualityT = 0; } }
+  if (render && mode === 'game' && qualityMode === 'auto') { if (dt > 1 / 40) slowFrames++; qualityT += dt; if (qualityT > 3) { if (slowFrames > 45 && quality > 0) lowerQuality(); slowFrames = 0; qualityT = 0; } }
   voiceT += dt;
   if (net.connected && voiceT > 0.12) {
     voiceT = 0;

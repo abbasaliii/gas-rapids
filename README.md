@@ -24,6 +24,7 @@ npm install
 npm run dev        # http://localhost:5173
 npm run sim        # headless check of every level (finish time, retries, where deaths happen)
 node sim/netcheck.mjs 150   # prediction error for a remote player at 150 ms latency
+node sim/loadtest.mjs 300 30  # 300 signaling clients against the live broker
 npm run build      # static site in dist/
 ```
 

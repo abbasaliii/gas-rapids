@@ -91,7 +91,7 @@ export class Net {
 
   async join(code, name) {
     this.name = name; this.code = code.toUpperCase().trim();
-    this.peer = await this._peer();
+    this.peer = await this._peer(PREFIX + this.code + '-' + Math.random().toString(36).slice(2, 10));
     this.role = 'client';
     this.peer.on('call', (call) => this.voice.answer(call));
     const c = this.peer.connect(PREFIX + this.code, { reliable: false, serialization: 'json' });
