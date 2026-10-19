@@ -155,7 +155,7 @@ function toonify(root) {
 // ---------------------------------------------------------------- game setup
 function loadLevel(idx, crew) {
   if (G) scene.remove(G.track.group, G.raft.mesh);
-  const level = idx === 'daily' ? dailyLevel() : LEVELS[idx];
+  const level = idx === 'daily' ? dailyLevel() : idx === 'preview' ? LEVELS.preview : LEVELS[idx];
   const track = buildTrack(level);
   scene.add(track.group);
   scene.background = new THREE.Color(level.theme.sky);
@@ -546,8 +546,11 @@ function tick(now, render = true) {
 }
 requestAnimationFrame(frame);
 
-// preview scene behind the title so the page is never empty
-(function preview() {
-  const { level, track, raft } = loadLevel(0, 4);
+// preview scene behind the title so the page is never empty: a tiny two-segment river, built after first paint
+setTimeout(function preview() {
+  if (G) return; // a real game already started
+  const mini = { ...LEVELS[0], name: 'preview', segments: LEVELS[0].segments.slice(0, 2).map((s) => ({ ...s, f: (s.f || []).filter((f) => f.type !== 'checkpoint' && f.type !== 'finish') })) };
+  LEVELS.preview = mini;
+  const { level, track, raft } = loadLevel('preview', 4);
   G = { idx: 0, level, online: null, track, raft, bots: new Bots(track), hud: new Hud(raft.players), time: 0, trackTime: 0, phase: 'idle', cd: 0, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false };
-})();
+}, 60);
