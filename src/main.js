@@ -215,6 +215,27 @@ function finishGame() {
   setTimeout(() => { if (G === game) showFinish(G.time, raft.retries, false); }, 1700);
 }
 
+// ---------------------------------------------------------------- full screen (Android, desktop) and iPhone fallback
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+async function goFullscreen() {
+  const el = document.documentElement;
+  if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch {} return; }
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (req) {
+    try { await req.call(el, { navigationUI: 'hide' }); } catch {}
+    try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch {}
+  } else if (isIOS && !standalone) { $('ios-hint').hidden = false; }
+}
+$('fs-title').addEventListener('click', goFullscreen);
+$('fs-hud').addEventListener('click', goFullscreen);
+if (isIOS && !standalone) { $('fs-title').textContent = '📲 Play full screen'; $('ios-hint').hidden = false; }
+if (standalone) { $('fs-title').hidden = true; }
+addEventListener('keydown', (e) => { if (e.code === 'KeyF' && !(e.target && e.target.tagName === 'INPUT')) goFullscreen(); });
+// phones: the first tap on Play also asks for full screen, while we still have the gesture
+let fsTried = false;
+ui.play.addEventListener('click', () => { if (!fsTried && matchMedia('(pointer: coarse)').matches && !standalone) { fsTried = true; goFullscreen(); } });
+
 ui.play.addEventListener('click', () => { audio.init(); audio.setMusic(ui.music.checked); audio.startMusic('menu'); show(ui.levels); mode = 'levels'; renderLevels(); setPlayers(players); });
 $('credits-open').addEventListener('click', () => { $('credits').hidden = false; });
 $('credits-close').addEventListener('click', () => { $('credits').hidden = true; });

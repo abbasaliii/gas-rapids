@@ -34,6 +34,10 @@
 .right{display:flex;gap:10px;align-items:center}
 .mic{font-size:20px;background:rgba(0,0,0,.28);border:2px solid rgba(255,255,255,.8);border-radius:999px;width:42px;height:42px;cursor:pointer;pointer-events:auto;color:#fff}
 .mic.off{background:#d62f4a} .mic[hidden]{display:none}
+.mic.fs{font-size:22px}
+.btn.small{font-size:18px;padding:10px 22px}
+#ios-hint[hidden]{display:none}
+:fullscreen .mic.fs,:-webkit-full-screen .mic.fs{display:none}
 .toast{position:absolute;top:22%;left:50%;transform:translate(-50%,0) scale(.7);font-family:var(--font-display);font-size:clamp(34px,7vw,72px);color:#fff;text-shadow:0 4px 0 rgba(0,0,0,.3),0 0 30px rgba(0,0,0,.2);opacity:0;pointer-events:none;letter-spacing:1px;white-space:nowrap}
 .toast.show{animation:toast 1.4s cubic-bezier(.2,1.4,.4,1) forwards}
 @keyframes toast{0%{opacity:0;transform:translate(-50%,30px) scale(.6)}20%{opacity:1;transform:translate(-50%,0) scale(1.05)}75%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-30px) scale(.9)}}
@@ -51,7 +55,7 @@
 .tbtn.right{left:calc(118px + env(safe-area-inset-left))}
 .tbtn.toot{right:calc(22px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom));width:128px;height:128px;font-size:30px;letter-spacing:2px;background:rgba(95,212,0,.45);border-color:#b8ff3b}
 @media (pointer:coarse){.gasbars{bottom:auto;top:52px;left:12px}.gasbar .bar{width:90px}.gasbar .nm small{display:none}.timer{font-size:18px;padding:3px 12px}.pill{font-size:16px;padding:3px 10px}}
-@media (pointer:coarse) and (orientation:portrait){.hud::after{content:"Turn your phone sideways";position:absolute;inset:0;display:grid;place-items:center;font-family:var(--font-display);font-size:28px;color:#fff;background:rgba(0,0,0,.55);text-shadow:0 2px 0 rgba(0,0,0,.4);pointer-events:none}}
+@media (pointer:coarse) and (orientation:portrait){.hud::after{content:"Turn your phone sideways · tap ⛶ for full screen";position:absolute;inset:0;display:grid;place-items:center;font-family:var(--font-display);font-size:28px;color:#fff;background:rgba(0,0,0,.55);text-shadow:0 2px 0 rgba(0,0,0,.4);pointer-events:none}}
 
 /* ---------- screens ---------- */
 .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px 16px;text-align:center;overflow:auto;background:radial-gradient(120% 90% at 50% 0%,rgba(255,255,255,.35),transparent 60%),linear-gradient(180deg,rgba(159,217,255,.55),rgba(73,177,255,.6))}

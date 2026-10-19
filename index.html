@@ -10,6 +10,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Archivo:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <meta name="theme-color" content="#2f96ff" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="stylesheet" href="./src/style.css" />
 </head>
 <body>
@@ -22,6 +29,7 @@
     <div class="topbar">
       <div class="timer"><span class="clock">⏱</span><span id="timer">00:00.00</span></div>
       <div class="right">
+        <button id="fs-hud" class="mic fs" title="Full screen (F)">⛶</button>
         <button id="mic-hud" class="mic" hidden title="Toggle microphone (M)">🎤</button>
         <div class="pill" title="Beans collected"><span>🥫</span><span id="cans">0</span></div>
         <div class="pill retries" title="Retries"><span>↻</span><span id="retries">0</span></div>
@@ -46,6 +54,7 @@
       <label class="opt"><input type="checkbox" id="opt-music" checked /> Music</label>
     </div>
     <p class="hint">Local co-op: up to four on one keyboard. Any seat nobody takes is crewed by a bot that toots when you do.</p>
+    <div class="row"><button id="fs-title" class="btn ghost small">⛶ Full screen</button><span id="ios-hint" class="hint" hidden>iPhone: tap Share → "Add to Home Screen" to play without the address bar.</span></div>
     <button id="credits-open" class="linkbtn">Credits</button>
   </div>
   <div id="credits" class="credits" hidden>
