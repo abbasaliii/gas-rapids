@@ -233,8 +233,21 @@ if (isIOS && !standalone) { $('fs-title').textContent = '📲 Play full screen';
 if (standalone) { $('fs-title').hidden = true; }
 addEventListener('keydown', (e) => { if (e.code === 'KeyF' && !(e.target && e.target.tagName === 'INPUT')) goFullscreen(); });
 // phones: the first tap on Play also asks for full screen, while we still have the gesture
-let fsTried = false;
-ui.play.addEventListener('click', () => { if (!fsTried && matchMedia('(pointer: coarse)').matches && !standalone) { fsTried = true; goFullscreen(); } });
+// phones: the first few taps on any big button or the touch controls ask for full screen, while we still have the gesture
+let fsTries = 0;
+document.addEventListener('pointerup', (e) => {
+  if (!matchMedia('(pointer: coarse)').matches || standalone || document.fullscreenElement || fsTries >= 4) return;
+  if (e.target.closest('.btn, .tbtn, .level, .mic')) { fsTries++; goFullscreen(); }
+}, true);
+
+// ---------------------------------------------------------------- tab hidden: silence everything, pause local races
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    audio.suspend();
+    if (G && mode === 'game' && !G.online && G.phase === 'race') { G.phase = 'countdown'; G.cd = 2.9; G.cdShown = null; }
+  } else audio.resume();
+});
+addEventListener('pagehide', () => audio.suspend());
 
 ui.play.addEventListener('click', () => { audio.init(); audio.setMusic(ui.music.checked); audio.startMusic('menu'); show(ui.levels); mode = 'levels'; renderLevels(); setPlayers(players); });
 $('credits-open').addEventListener('click', () => { $('credits').hidden = false; });

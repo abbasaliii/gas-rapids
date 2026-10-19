@@ -54,7 +54,32 @@
 .tbtn.left{left:calc(18px + env(safe-area-inset-left))}
 .tbtn.right{left:calc(118px + env(safe-area-inset-left))}
 .tbtn.toot{right:calc(22px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom));width:128px;height:128px;font-size:30px;letter-spacing:2px;background:rgba(95,212,0,.45);border-color:#b8ff3b}
-@media (pointer:coarse){.gasbars{bottom:auto;top:52px;left:12px}.gasbar .bar{width:90px}.gasbar .nm small{display:none}.timer{font-size:18px;padding:3px 12px}.pill{font-size:16px;padding:3px 10px}}
+@media (pointer:coarse){
+  .gasbars{bottom:auto;top:50px;left:10px;flex-direction:row;gap:10px}
+  .gasbar{flex-direction:column;gap:2px;transform:none;animation:none}
+  .gasbar .av{width:30px;height:30px;font-size:15px;border-width:2px}
+  .gasbar .nm{display:none}
+  .gasbar .bar{width:58px;height:9px;border-width:2px}
+  .timer{font-size:17px;padding:3px 12px;top:0}
+  .pill{font-size:15px;padding:3px 9px}
+  .mic{width:36px;height:36px;font-size:17px}
+  .topbar{top:8px;left:10px;right:10px}
+  .race-hint{bottom:auto;top:30%;font-size:15px;padding:8px 14px;white-space:normal;text-align:center}
+  .toast{top:16%;font-size:clamp(26px,6vw,48px)}
+}
+/* short landscape phones: keep the title screen on one screen */
+@media (max-height:480px){
+  .screen{gap:8px;padding:10px 16px}
+  .logo .l1{font-size:52px}.logo .l2{font-size:40px}
+  .logo .l1,.logo .l2{text-shadow:0 4px 0 #a14d00}
+  .tag{font-size:14px}.hint{font-size:12px}
+  .btn{font-size:20px;padding:10px 26px}.row.big .btn{font-size:22px;padding:12px 30px}
+  .row{gap:10px}
+  .seats{gap:8px}.seat{min-width:120px;padding:8px 10px}.seat .face{font-size:30px}.seat .who{font-size:16px}
+  .world{padding:8px 12px;gap:8px}.world h2{font-size:18px;min-width:110px}.level{min-width:150px;padding:8px 10px}.level .n{font-size:15px}
+  .h{font-size:40px}
+  .panel{padding:12px 16px;gap:8px}
+}
 @media (pointer:coarse) and (orientation:portrait){.hud::after{content:"Turn your phone sideways · tap ⛶ for full screen";position:absolute;inset:0;display:grid;place-items:center;font-family:var(--font-display);font-size:28px;color:#fff;background:rgba(0,0,0,.55);text-shadow:0 2px 0 rgba(0,0,0,.4);pointer-events:none}}
 
 /* ---------- screens ---------- */

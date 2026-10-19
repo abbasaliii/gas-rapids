@@ -36,6 +36,13 @@ export class Audio {
     this.loadAssets();
   }
   setEnabled(on) { this.enabled = on; if (this.master) this.master.gain.value = on ? 0.75 : 0; }
+  /** tab hidden or page leaving: cut every voice and freeze the context so nothing plays in the background */
+  suspend() {
+    if (!this.ctx) return;
+    for (const seat of [...this.voices.keys()]) this.fartStop(seat);
+    try { this.ctx.suspend(); } catch {}
+  }
+  resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {}); }
   setMusic(on) { this.musicOn = on; if (this.musicBus) this.musicBus.gain.value = on ? 0.2 : 0; }
   get ok() { return this.ctx && this.enabled; }
 
