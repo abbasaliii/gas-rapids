@@ -35,6 +35,11 @@
 .mic{font-size:20px;background:rgba(0,0,0,.28);border:2px solid rgba(255,255,255,.8);border-radius:999px;width:42px;height:42px;cursor:pointer;pointer-events:auto;color:#fff}
 .mic.off{background:#d62f4a} .mic[hidden]{display:none}
 .mic.fs{font-size:22px}
+.mic.rec{color:#ff4f4f;font-size:20px}
+.mic.rec.on{background:#d62f4a;color:#fff;animation:blink 1s steps(2) infinite}
+@keyframes blink{to{opacity:.55}}
+.socials{gap:10px}.socials a{font:700 13px var(--font);color:var(--navy);background:rgba(255,255,255,.75);border-radius:999px;padding:6px 12px;text-decoration:none}
+#clip-row[hidden]{display:none}
 .btn.small{font-size:18px;padding:10px 22px}
 #ios-hint[hidden]{display:none}
 :fullscreen .mic.fs,:-webkit-full-screen .mic.fs{display:none}

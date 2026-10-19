@@ -11,9 +11,12 @@ import { ROSTER } from './characters.js';
 import { Net } from './net.js';
 import { fmtTime } from './util.js';
 import { dailyLevel, todayKey } from './daily.js';
+import { Recorder } from './recorder.js';
 
 const BROKER_URL = 'https://' + (import.meta.env.VITE_PEER_HOST || 'toot-river-broker.gas-rapids.workers.dev');
-const VERSION = '0.9.0';
+const VERSION = '0.9.1';
+// socials and support links: fill these in when the accounts exist; empty ones are hidden
+const SOCIAL = { TikTok: '', Instagram: '', YouTube: '', Discord: '', 'Support us': '' };
 // crash reports go to our own broker (no third party); a few per session at most
 let reported = 0;
 function report(msg, stack, where) {
@@ -45,6 +48,8 @@ const audio = new Audio();
 const input = new Input();
 input.bindTouch(document.getElementById('touch'));
 const net = new Net();
+const recorder = new Recorder(canvas, audio, net);
+let autoRec = false; try { autoRec = localStorage.getItem('tootriver-autorec') === '1'; } catch {}
 
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -182,6 +187,9 @@ function startGame(opts = {}) {
   else { hud.setRoles(localRoles()); ui.micHud.hidden = true; }
   hud.toast(idx === 'daily' ? 'DAILY RIVER' : `${idx + 1}. ${level.name.toUpperCase()}`);
   if (online !== 'client') countPlay(idx, online, raft.count);
+  $('clip-row').hidden = true;
+  if (autoRec && recorder.supported && !recorder.recording) { recorder.start(); }
+  setRecUi();
   audio.stopMusic(); audio.startMusic('race');
   show(null);
   mode = 'game';
@@ -212,6 +220,7 @@ function showFinish(time, retries, isClient) {
   show(ui.finish);
   G.hud.show(false);
   mode = 'finish';
+  if (recorder.recording) { recorder.lastSeconds = Math.round(recorder.seconds); recorder.stop(); setRecUi(); }
   for (let n = 0; n < stars; n++) setTimeout(() => { starEls[n].classList.add('on'); audio.star(n); }, 350 + n * 280);
 }
 
@@ -238,6 +247,25 @@ async function goFullscreen() {
     try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch {}
   } else if (isIOS && !standalone) { $('ios-hint').hidden = false; }
 }
+function setRecUi() { const on = recorder.recording; $('rec-hud').classList.toggle('on', on); $('rec-hud').textContent = on ? '⏹' : '⏺'; $('rec-hud').title = on ? 'Stop recording (R)' : 'Record a clip (R)'; }
+function toggleRecord() {
+  if (!recorder.supported) { if (G && G.hud) G.hud.toast('RECORDING NOT SUPPORTED HERE'); return; }
+  if (recorder.recording) { recorder.stop(); if (G && G.hud) G.hud.toast('CLIP SAVED'); }
+  else if (recorder.start()) { if (G && G.hud) G.hud.toast('RECORDING'); }
+  setRecUi();
+}
+recorder.onReady = () => { $('clip-row').hidden = false; $('clip-len').textContent = recorder.lastSeconds || Math.round(recorder.seconds) || '?'; };
+$('rec-hud').addEventListener('click', toggleRecord);
+$('clip-save').addEventListener('click', () => recorder.download());
+$('clip-share').addEventListener('click', async () => { const ok = await recorder.share('My Toot River run 😂 play free: ' + location.origin + location.pathname); if (!ok) recorder.download(); });
+$('opt-autorec').checked = autoRec;
+$('opt-autorec').addEventListener('change', (e) => { autoRec = e.target.checked; try { localStorage.setItem('tootriver-autorec', autoRec ? '1' : '0'); } catch {} });
+$('share-result').addEventListener('click', async () => {
+  const text = `I finished ${G ? G.level.name : 'Toot River'} in ${ui.fTime.textContent} 💨 Come toot with me: ${location.origin}${location.pathname}`;
+  if (navigator.share) { try { await navigator.share({ text, title: 'Toot River' }); return; } catch {} }
+  try { await navigator.clipboard.writeText(text); $('share-result').textContent = 'Copied!'; setTimeout(() => ($('share-result').textContent = '📣 Share my time'), 1500); } catch {}
+});
+$('socials').innerHTML = Object.entries(SOCIAL).filter(([, u]) => u).map(([k, u]) => `<a href="${u}" target="_blank" rel="noopener">${k}</a>`).join('');
 $('fs-title').addEventListener('click', goFullscreen);
 $('fs-hud').addEventListener('click', goFullscreen);
 if (isIOS && !standalone) { $('fs-title').textContent = '📲 Play full screen'; $('ios-hint').hidden = false; }
@@ -292,6 +320,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && mode === 'game') ui.menu.click();
   if (e.code === 'Escape' && mode === 'levels') ui.levelsBack.click();
   if (e.code === 'KeyM' && net.connected) toggleMic();
+  if (e.code === 'KeyR' && mode === 'game') toggleRecord();
 });
 
 // ---------------------------------------------------------------- party
@@ -374,7 +403,7 @@ function hostStart() { net.crew = Math.max(1, net.seats.filter(Boolean).length);
 ui.lobbyStart.addEventListener('click', hostStart);
 
 net.on('lobby', () => { if (mode === 'party') renderLobby(); net.voice.sync(); if (G && G.online) G.hud.setNames(net.seats.map((s, i) => (s ? s.name : ROSTER[i].name))); });
-net.on('voice', () => { if (mode === 'party') renderLobby(); });
+net.on('voice', () => { if (mode === 'party') renderLobby(); recorder.syncVoice(); });
 setInterval(() => { if (net.connected) net.voice.sync(); }, 2500);
 net.on('welcome', () => { ui.lobby.hidden = false; });
 net.on('full', () => partyError('That party is full.'));

@@ -11,7 +11,8 @@
     "deploy:broker": "wrangler deploy -c server/wrangler.jsonc",
     "deploy": "npm run deploy:broker && npm run deploy:web",
     "sim": "node sim/run.mjs",
-    "netcheck": "node sim/netcheck.mjs 150"
+    "netcheck": "node sim/netcheck.mjs 150",
+    "pack:itch": "vite build && node -e \"const {execSync}=require('child_process');execSync('powershell -NoProfile -Command Compress-Archive -Force -Path dist/* -DestinationPath toot-river-itch.zip')\""
   },
   "keywords": [],
   "author": "",
