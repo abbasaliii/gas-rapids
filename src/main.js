@@ -185,6 +185,9 @@ function startGame(opts = {}) {
   if (online) { hud.setRoles(net.seats.slice(0, raft.count).map((s, i) => (!s ? false : i === net.mySeat ? true : s.name))); ui.micHud.hidden = false; }
   if (online === 'client') { raft.predicting = true; G.pred = { seq: 0, buf: [], acc: 0, others: null }; }
   else { hud.setRoles(localRoles()); ui.micHud.hidden = true; }
+  // who is who on the raft
+  if (online) raft.setLabels(raft.seats.map((_, i) => ({ text: i === net.mySeat ? 'YOU' : (net.seats[i] ? net.seats[i].name : ''), local: i === net.mySeat })));
+  else raft.setLabels(raft.seats.map((_, i) => ({ text: i < players ? (players > 1 ? 'P' + (i + 1) : 'YOU') : '', local: i < players })));
   hud.toast(idx === 'daily' ? 'DAILY RIVER' : `${idx + 1}. ${level.name.toUpperCase()}`);
   if (online !== 'client') countPlay(idx, online, raft.count);
   $('clip-row').hidden = true;
@@ -433,9 +436,11 @@ function updateCamera(dt) {
   const s = track.at(raft.d + 6);
   const fwdX = s.tx, fwdZ = s.tz;
   const sp = Math.hypot(raft.vx, raft.vz);
-  const back = 13 + sp * 0.2, up = 15 + sp * 0.15;
+  // phones and short windows sit closer so the raft and arrows are big enough to read
+  const near = matchMedia('(pointer: coarse)').matches || innerHeight < 520;
+  const back = (near ? 9 : 13) + sp * 0.2, up = (near ? 9.5 : 15) + sp * 0.15;
   tmpV.set(raft.x - fwdX * back, up, raft.z - fwdZ * back);
-  const look = new THREE.Vector3(raft.x + fwdX * 5, 0.5, raft.z + fwdZ * 5);
+  const look = new THREE.Vector3(raft.x + fwdX * (near ? 3.5 : 5), 0.5, raft.z + fwdZ * (near ? 3.5 : 5));
   if (!G.camInit) { camPos.copy(tmpV); camLook.copy(look); G.camInit = true; }
   camPos.lerp(tmpV, Math.min(1, dt * 3.2));
   camLook.lerp(look, Math.min(1, dt * 5));

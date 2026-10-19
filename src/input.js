@@ -30,7 +30,7 @@ export class Input {
     const mk = (cls, label) => { const z = document.createElement('div'); z.className = 'tbtn ' + cls; z.innerHTML = label; el.appendChild(z); return z; };
     const left = mk('steer left', '◀'), right = mk('steer right', '▶'), toot = mk('toot', 'TOOT');
     const held = new Map(); // pointerId -> name
-    const press = (name) => (e) => { e.preventDefault(); held.set(e.pointerId, name); e.currentTarget.classList.add('down'); this.claim(0); this.syncTouch(held); };
+    const press = (name) => (e) => { e.preventDefault(); held.set(e.pointerId, name); e.currentTarget.classList.add('down'); this.claim(0); this.syncTouch(held); if (name === 'fart' && navigator.vibrate) navigator.vibrate(18); };
     const release = (e) => { const name = held.get(e.pointerId); held.delete(e.pointerId); [left, right, toot].forEach((b) => { if (![...held.values()].includes(b.dataset.n)) b.classList.remove('down'); }); this.syncTouch(held); };
     for (const [b, name] of [[left, 'left'], [right, 'right'], [toot, 'fart']]) {
       b.dataset.n = name;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeAnimal, ROSTER } from './characters.js';
-import { clamp } from './util.js';
+import { clamp, nameTagTexture as labelTexture } from './util.js';
 
 export const SEAT_R = 2.15;     // where the animals sit
 export const RAFT_R = 2.75;     // collision radius
@@ -77,8 +77,18 @@ export class Raft {
     const arrowGeo = new THREE.ShapeGeometry(arrowShape);
     this.arrows = this.seats.map((st, i) => {
       const a = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(ROSTER[i].color), transparent: true, opacity: 0.9, depthWrite: false }));
-      a.rotation.x = -Math.PI / 2; a.position.y = 0.5; g.add(a); return a;
+      a.rotation.x = -Math.PI / 2; a.position.y = 0.5; g.add(a);
+      // dark outline under the arrow so it reads on every water colour
+      const o = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: 0x102030, transparent: true, opacity: 0.7, depthWrite: false }));
+      o.rotation.x = -Math.PI / 2; o.position.y = 0.49; o.scale.set(1.3, 1.3, 1); g.add(o); a.userData.outline = o;
+      return a;
     });
+    // name / YOU markers floating above each seat
+    this.markers = this.seats.map((st, i) => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture('', ROSTER[i].color, false), transparent: true, depthWrite: false, depthTest: false }));
+      sp.position.set(st.x, 2.9, st.z); sp.scale.set(1.6, 0.8, 1); sp.visible = false; sp.renderOrder = 10; g.add(sp); return sp;
+    });
+    this.local = [];
     this.animals = this.seats.map((st, i) => {
       const c = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.7), cushM);
       c.position.set(st.x * 1.18, 0.55, st.z * 1.18); c.rotation.y = -st.angle; c.castShadow = true; g.add(c);
@@ -91,6 +101,17 @@ export class Raft {
     });
     this.body = g;
     this.mesh = new THREE.Group(); this.mesh.add(g);
+  }
+
+  /** labels[i] = { text, local } : a big bouncing "YOU" for local players, small names for the rest */
+  setLabels(labels) {
+    this.local = labels.map((l) => !!(l && l.local));
+    labels.forEach((l, i) => {
+      const m = this.markers[i]; if (!m) return;
+      if (!l || !l.text) { m.visible = false; return; }
+      m.material.map = labelTexture(l.text, ROSTER[i].color, l.local); m.material.needsUpdate = true;
+      m.scale.set(l.local ? 2.6 : 1.7, l.local ? 1.3 : 0.85, 1); m.visible = true;
+    });
   }
 
   reset(d = 0) {
@@ -354,8 +375,11 @@ export class Raft {
       const r = rotY(-st.x / len, -st.z / len, pl.aim * AIM_MAX + st.skew);
       a.position.set(st.x * 0.62 + r.x * 0.2, 0.5, st.z * 0.62 + r.z * 0.2);
       a.rotation.z = Math.atan2(r.x, r.z) + Math.PI; // ShapeGeometry points +y, the mesh lies flat: +y maps to -z
-      const s = pl.farting ? 1.25 : 1;
-      a.scale.set(s, s, 1); a.material.opacity = pl.farting ? 1 : 0.75;
+      const mine = this.local[i] ? 1.6 : 1;
+      const s = (pl.farting ? 1.25 : 1) * mine;
+      a.scale.set(s, s, 1); a.material.opacity = pl.farting ? 1 : this.local[i] ? 0.95 : 0.6;
+      const o = a.userData.outline; o.position.set(a.position.x, 0.49, a.position.z); o.rotation.z = a.rotation.z; o.scale.set(s * 1.3, s * 1.3, 1); o.material.opacity = this.local[i] ? 0.8 : 0.4;
+      const m = this.markers[i]; if (m.visible) { const bob = this.local[i] ? Math.abs(Math.sin(t * 5)) * 0.35 : 0; m.position.set(st.x, 2.7 + bob, st.z); }
     });
   }
 }

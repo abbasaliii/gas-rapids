@@ -51,6 +51,22 @@ export function labelTexture(text) {
   return canvasTex(c);
 }
 
+/** Floating name tag: "YOU" with a down chevron for local players, a small name for others. */
+const tagCache = new Map();
+export function nameTagTexture(text, color = '#ffffff', local = false) {
+  const key = text + '|' + color + '|' + local;
+  if (tagCache.has(key)) return tagCache.get(key);
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  if (text) {
+    g.font = `bold ${local ? 150 : 96}px "Lilita One", "Archivo", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineJoin = 'round'; g.lineWidth = local ? 22 : 14; g.strokeStyle = '#102030';
+    g.strokeText(text, 256, local ? 88 : 110); g.fillStyle = local ? '#ffd23f' : color; g.fillText(text, 256, local ? 88 : 110);
+    if (local) { g.beginPath(); g.moveTo(196, 170); g.lineTo(316, 170); g.lineTo(256, 240); g.closePath(); g.lineWidth = 16; g.stroke(); g.fillStyle = '#ffd23f'; g.fill(); }
+  }
+  const tex = canvasTex(c); tagCache.set(key, tex); return tex;
+}
+
 export function checkerTexture() {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 64;
