@@ -45,6 +45,8 @@ export class Raft {
     this.bump = 0; this.tiltX = 0; this.tiltZ = 0; this.deathT = 0; this.spawnT = 0;
     this.events = []; // 'checkpoint' | 'die' | 'respawn' | 'finish' | 'bump' | 'can' | 'geyser'
     this.players = ROSTER.slice(0, count).map((r, i) => ({ ...r, seat: i, gas: GAS_MAX, farting: false, empty: false, cooldown: 0, aim: 0, thrust: 0, human: false }));
+    this.predicting = false; // online client: simulate locally for feel, but never decide deaths, pickups or progress
+    this.visOff = { x: 0, z: 0, yaw: 0 };
     this.buildMesh();
     this.reset();
   }
@@ -223,7 +225,7 @@ export class Raft {
       const dx = this.x - px, dz = this.z - pz, dist = Math.hypot(dx, dz);
       const minD = o.r + RAFT_R * 0.8;
       if (dist < minD) {
-        if (o.lethal) { this.die(); return; }
+        if (o.lethal) { if (this.predicting) continue; this.die(); return; }
         const nx = dx / (dist || 1), nz = dz / (dist || 1);
         const over = minD - dist;
         this.x += nx * over; this.z += nz * over;
@@ -234,17 +236,17 @@ export class Raft {
     }
     // pickups
     for (const p of T.pickups) {
-      if (p.taken) continue;
+      if (p.taken || this.predicting) continue;
       if (Math.hypot(this.x - p.x, this.z - p.z) < p.r + RAFT_R * 0.8) {
         p.taken = true; p.mesh.visible = false; this.cans++;
         for (const pl of this.players) { pl.gas = Math.min(GAS_MAX, pl.gas + CAN_GAS); if (pl.empty && pl.gas >= EMPTY_LOCK) pl.empty = false; }
         this.events.push('can'); this.audio.pickup(); this.fx.sparkle(p.x, p.z);
       }
     }
-    if (this.nextCp < T.checkpoints.length && near.d >= T.checkpoints[this.nextCp]) {
+    if (!this.predicting && this.nextCp < T.checkpoints.length && near.d >= T.checkpoints[this.nextCp]) {
       this.lastCp = T.checkpoints[this.nextCp]; this.nextCp++; this.events.push('checkpoint'); this.audio.chime();
     }
-    if (!this.finished && near.d >= T.finishD) { this.finished = true; this.events.push('finish'); }
+    if (!this.predicting && !this.finished && near.d >= T.finishD) { this.finished = true; this.events.push('finish'); }
     this.wakeT = (this.wakeT || 0) - dt;
     if (sp > 2 && this.wakeT <= 0) { this.wakeT = 0.22; this.fx.ripple(this.x - this.vx / sp * 2, this.z - this.vz / sp * 2, 1.1); }
     this.bump = Math.max(0, this.bump - dt * 3);
@@ -263,13 +265,27 @@ export class Raft {
   }
 
   /** Compact state for online clients. */
-  snapshot(trackTime) {
+  snapshot(trackTime, seqs = null) {
     return {
-      t: 's', x: +this.x.toFixed(2), z: +this.z.toFixed(2), y: +this.yaw.toFixed(3), vx: +this.vx.toFixed(2), vz: +this.vz.toFixed(2),
+      t: 's', x: +this.x.toFixed(2), z: +this.z.toFixed(2), y: +this.yaw.toFixed(3), vx: +this.vx.toFixed(2), vz: +this.vz.toFixed(2), av: +this.av.toFixed(3), q: seqs,
       d: Math.round(this.d), a: this.alive ? 1 : 0, r: this.retries, c: this.nextCp, f: this.finished ? 1 : 0, tc: +trackTime.toFixed(2),
       k: this.track.pickups.map((p) => (p.taken ? 1 : 0)).join(''),
       p: this.players.map((p) => [Math.round(p.gas), p.farting ? 1 : 0, p.empty ? 1 : 0, +p.aim.toFixed(2)]),
     };
+  }
+  /** Prediction client: adopt the host's state outright (the caller then replays its unacknowledged inputs). */
+  applyAuth(s, mySeat) {
+    this.x = s.x; this.z = s.z; this.yaw = s.y; this.vx = s.vx; this.vz = s.vz; this.av = s.av || 0;
+    this.d = s.d; this.retries = s.r; this.nextCp = s.c; this.finished = !!s.f;
+    if (this.alive && !s.a) { this.fx.splash(this.x, this.z, 26); this.audio.splash(); this.deathT = 0.5; this.players.forEach((pl, i) => { if (pl.farting) { pl.farting = false; this.audio.fartStop(i); } }); }
+    if (!this.alive && s.a) this.spawnT = 0.6;
+    this.alive = !!s.a;
+    if (s.k) this.track.pickups.forEach((p, i) => { const taken = s.k[i] === '1'; if (taken && !p.taken) { this.fx.sparkle(p.x, p.z); this.audio.pickup(); } p.taken = taken; p.mesh.visible = !taken; });
+    s.p.forEach(([gas, farting, empty, aim], i) => {
+      const pl = this.players[i]; if (!pl) return;
+      pl.gas = gas; pl.empty = !!empty;
+      if (i !== mySeat) pl.aim = aim; // my own aim is replayed from my input buffer
+    });
   }
   /** Blend toward a host snapshot; plays the same sounds and effects a local simulation would. */
   applySnapshot(s, dt) {
@@ -302,8 +318,11 @@ export class Raft {
   }
 
   syncMesh(t, dt) {
-    this.mesh.position.set(this.x, 0, this.z);
-    this.mesh.rotation.y = this.yaw;
+    // reconciliation error fades out over ~150 ms so corrections never pop
+    const k = Math.min(1, dt * 9);
+    this.visOff.x -= this.visOff.x * k; this.visOff.z -= this.visOff.z * k; this.visOff.yaw -= this.visOff.yaw * k;
+    this.mesh.position.set(this.x + this.visOff.x, 0, this.z + this.visOff.z);
+    this.mesh.rotation.y = this.yaw + this.visOff.yaw;
     if (this.deathT > 0) {
       this.deathT -= dt;
       const k = Math.max(0, this.deathT / 0.5);

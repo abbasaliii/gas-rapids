@@ -10,6 +10,9 @@ import { Hud } from './hud.js';
 import { ROSTER } from './characters.js';
 import { Net } from './net.js';
 import { fmtTime } from './util.js';
+import { dailyLevel, todayKey } from './daily.js';
+
+const BROKER_URL = 'https://' + (import.meta.env.VITE_PEER_HOST || 'toot-river-broker.gas-rapids.workers.dev');
 
 // ---------------------------------------------------------------- renderer
 const canvas = document.getElementById('game');
@@ -54,7 +57,7 @@ let G = null;       // current game
 let mode = 'title'; // title | levels | party | game | finish
 let clock = 0;
 let selectedLevel = 0;
-let players = 1, crewBots = false;
+let players = 1, crewBots = true;
 try { players = Math.min(4, Math.max(1, +localStorage.getItem('tootriver-players') || 1)); } catch {} // crew bots are off every launch: the raft carries exactly the players you pick
 const setPlayers = (n) => { players = n; try { localStorage.setItem('tootriver-players', n); } catch {} input.claimed = [0, 1, 2, 3].map((i) => i < n); renderSeats(); };
 const setBots = (on) => { crewBots = on; renderSeats(); };
@@ -71,7 +74,23 @@ const saveProg = () => { try { localStorage.setItem(PROG_KEY, JSON.stringify(pro
 const unlocked = (i) => i === 0 || !!(prog[i - 1] && prog[i - 1].stars >= 1) || !!(prog[i] && prog[i].best);
 const starsFor = (level, time) => (time <= level.stars[0] ? 3 : time <= level.stars[1] ? 2 : 1);
 
+let dailyTop = null;
+async function fetchDaily() {
+  try { const r = await fetch(`${BROKER_URL}/daily/top?day=${todayKey()}`); const j = await r.json(); dailyTop = j.top || []; } catch { dailyTop = []; }
+  if (mode === 'levels') renderDailyCard();
+}
+function renderDailyCard() {
+  const el = $('daily'); if (!el) return;
+  const lv = dailyLevel();
+  const best = (prog.daily && prog.daily.day === todayKey()) ? prog.daily.best : null;
+  const rows = dailyTop === null ? '<li>loading…</li>' : dailyTop.length ? dailyTop.slice(0, 5).map((e, i) => `<li><b>${i + 1}.</b> ${e.name} <span>${fmtTime(e.time)}</span></li>`).join('') : '<li>No times yet today. Be first.</li>';
+  el.innerHTML = `<div class="world daily" style="--w:${WORLDS[lv.world].color}"><h2>📅 Daily River<span>new every day · ${WORLDS[lv.world].name} · ${todayKey()}</span></h2>
+    <div class="level" data-i="daily" style="--w:${WORLDS[lv.world].color}"><div class="n">Today's river</div><div class="t">${best ? 'Your best ' + fmtTime(best) : 'Not run yet today'} · everyone gets the same river</div></div>
+    <ol class="board">${rows}</ol></div>`;
+  el.querySelector('.level').addEventListener('click', () => { selectedLevel = 'daily'; startGame(); });
+}
 function renderLevels() {
+  renderDailyCard(); fetchDaily();
   ui.worlds.innerHTML = WORLDS.map((w, wi) => {
     const cards = LEVELS.map((l, i) => ({ l, i })).filter(({ l }) => l.world === wi).map(({ l, i }) => {
       const p = prog[i] || {}, lock = !unlocked(i);
@@ -126,7 +145,7 @@ function toonify(root) {
 // ---------------------------------------------------------------- game setup
 function loadLevel(idx, crew) {
   if (G) scene.remove(G.track.group, G.raft.mesh);
-  const level = LEVELS[idx];
+  const level = idx === 'daily' ? dailyLevel() : LEVELS[idx];
   const track = buildTrack(level);
   scene.add(track.group);
   scene.background = new THREE.Color(level.theme.sky);
@@ -149,8 +168,9 @@ function startGame(opts = {}) {
   hud.show(true);
   G = { idx, level, online, track, raft, bots: new Bots(track), hud, time: 0, trackTime: 0, phase: online === 'client' ? 'client' : 'countdown', cd: 3.9, cdShown: null, camPos: new THREE.Vector3(), camLook: new THREE.Vector3(), camInit: false, snap: null, lastSnap: 0, hintT: 0 };
   if (online) { hud.setRoles(net.seats.slice(0, raft.count).map((s, i) => (!s ? false : i === net.mySeat ? true : s.name))); ui.micHud.hidden = false; }
+  if (online === 'client') { raft.predicting = true; G.pred = { seq: 0, buf: [], acc: 0, others: null }; }
   else { hud.setRoles(localRoles()); ui.micHud.hidden = true; }
-  hud.toast(`${idx + 1}. ${level.name.toUpperCase()}`);
+  hud.toast(idx === 'daily' ? 'DAILY RIVER' : `${idx + 1}. ${level.name.toUpperCase()}`);
   audio.stopMusic(); audio.startMusic('race');
   show(null);
   mode = 'game';
@@ -158,20 +178,23 @@ function startGame(opts = {}) {
 
 function showFinish(time, retries, isClient) {
   const { level, idx } = G;
-  const stars = starsFor(level, time);
+  const stars = idx === 'daily' ? 0 : starsFor(level, time);
   ui.fTime.textContent = fmtTime(time);
   ui.fSub.textContent = `${level.name} · ${retries} ${retries === 1 ? 'retry' : 'retries'} · ${G.raft.cans} 🥫`;
-  const p = prog[idx] || {};
+  const p = (idx === 'daily' ? (prog.daily && prog.daily.day === todayKey() ? prog.daily : {}) : prog[idx]) || {};
   const newBest = !p.best || time < p.best;
   if (!isClient) {
-    prog[idx] = { best: newBest ? time : p.best, stars: Math.max(stars, p.stars || 0) };
+    if (idx === 'daily') prog.daily = { day: todayKey(), best: newBest ? time : p.best };
+    else prog[idx] = { best: newBest ? time : p.best, stars: Math.max(stars, p.stars || 0) };
     saveProg();
   }
+  $('daily-submit').hidden = idx !== 'daily';
+  if (idx === 'daily') { $('daily-name').value = (localStorage.getItem('tootriver-name') || ''); $('daily-result').textContent = ''; $('daily-submit').dataset.time = time; $('daily-submit').dataset.crew = G.raft.count; }
   ui.fBest.textContent = newBest ? (p.best ? `New best! Previous ${fmtTime(p.best)}` : 'First finish. That is the time to beat.') : `Best ${fmtTime(p.best)}`;
   if (stars < 3) ui.fBest.textContent += ` · gold under ${level.stars[0]}s`;
   const starEls = ui.stars.querySelectorAll('i');
   starEls.forEach((s) => s.classList.remove('on'));
-  ui.next.hidden = isClient || idx + 1 >= LEVELS.length;
+  ui.next.hidden = isClient || idx === 'daily' || idx + 1 >= LEVELS.length;
   ui.again.hidden = isClient;
   ui.menu.textContent = G.online ? 'Back to party' : 'Levels';
   ui.fWait.hidden = !isClient;
@@ -183,7 +206,7 @@ function showFinish(time, retries, isClient) {
 
 function finishGame() {
   const { raft } = G;
-  audio.fanfare(); audio.stopMusic();
+  audio.fanfare(); audio.startMusic('victory');
   G.phase = 'finished';
   G.hud.toast('FINISH!');
   effects.confetti(raft.x, raft.z, 90);
@@ -192,12 +215,25 @@ function finishGame() {
   setTimeout(() => { if (G === game) showFinish(G.time, raft.retries, false); }, 1700);
 }
 
-ui.play.addEventListener('click', () => { audio.init(); show(ui.levels); mode = 'levels'; renderLevels(); setPlayers(players); });
+ui.play.addEventListener('click', () => { audio.init(); audio.setMusic(ui.music.checked); audio.startMusic('menu'); show(ui.levels); mode = 'levels'; renderLevels(); setPlayers(players); });
+$('credits-open').addEventListener('click', () => { $('credits').hidden = false; });
+$('credits-close').addEventListener('click', () => { $('credits').hidden = true; });
 ui.levelsBack.addEventListener('click', () => { show(ui.title); mode = 'title'; });
 ui.next.addEventListener('click', () => { selectedLevel = Math.min(LEVELS.length - 1, G.idx + 1); startGame(); });
+$('daily-send').addEventListener('click', async () => {
+  const box = $('daily-submit'); const name = ($('daily-name').value.trim() || 'Player').slice(0, 12);
+  try { localStorage.setItem('tootriver-name', name); } catch {}
+  $('daily-result').textContent = 'Sending…';
+  try {
+    const r = await fetch(`${BROKER_URL}/daily/score`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ day: todayKey(), name, time: +box.dataset.time, crew: +box.dataset.crew }) });
+    const j = await r.json();
+    $('daily-result').textContent = j.ok ? `You are #${j.rank} today` : 'Could not submit';
+    dailyTop = j.top || dailyTop;
+  } catch { $('daily-result').textContent = 'Could not reach the leaderboard'; }
+});
 ui.again.addEventListener('click', () => { if (G && G.online === 'host') hostStart(); else startGame(); });
 ui.menu.addEventListener('click', () => {
-  audio.stopMusic();
+  audio.startMusic('menu');
   if (G && G.online) { show(ui.party); mode = 'party'; renderLobby(); }
   else { show(ui.levels); mode = 'levels'; renderLevels(); }
   if (G) G.hud.show(false);
@@ -307,7 +343,7 @@ net.on('ev', (d) => {
   if (d.e === 'geyser') { audio.geyser(); effects.shake = 1; }
   if (d.e === 'can') G.hud.toast('BEANS!');
   if (d.e === 'cd') { G.hud.countdown(d.v); if (d.v) audio.beep(d.v === 'GO!'); if (d.v === 'GO!') { G.hud.hint('HOLD SPACE TO TOOT · A / D TURN YOUR ARROW'); setTimeout(() => G && G.hud.hint(''), 9000); } }
-  if (d.e === 'finish') { audio.fanfare(); audio.stopMusic(); G.hud.toast('FINISH!'); effects.confetti(G.raft.x, G.raft.z, 90); }
+  if (d.e === 'finish') { audio.fanfare(); audio.startMusic('victory'); G.hud.toast('FINISH!'); effects.confetti(G.raft.x, G.raft.z, 90); }
 });
 net.on('end', (d) => { if (G && G.online === 'client') { G.time = d.time; G.raft.cans = d.cans || 0; setTimeout(() => { if (G && G.online === 'client') showFinish(d.time, d.retries, true); }, 1700); } });
 net.on('closed', () => { if (net.role === 'client') { net.leave(); audio.stopMusic(); if (G) G.hud.show(false); show(ui.party); ui.setup.hidden = false; ui.lobby.hidden = true; mode = 'party'; partyError('The host left the party.'); } });
@@ -363,10 +399,32 @@ function tick(now, render = true) {
   if (mode === 'game' && G) {
     const { raft, track, hud } = G;
     if (G.online === 'client') {
-      net.sendInput(input.readAny());
+      // ---- client-side prediction: my inputs apply instantly; host snapshots correct us and we replay what the host has not seen yet
+      const P = G.pred, me = net.mySeat;
+      const mine = input.readAny();
+      P.seq++; P.buf.push({ seq: P.seq, inp: { ...mine }, dt });
+      if (P.buf.length > 240) P.buf.shift();
+      net.sendInput(mine, P.seq);
       G.trackTime += dt;
-      if (G.snap) { raft.applySnapshot(G.snap, dt); if (Math.abs(G.snap.tc - G.trackTime) > 0.25) G.trackTime = G.snap.tc; G.time = G.snap.f ? G.time : G.time + dt; }
+      const othersFrom = (snap) => raft.players.map((pl, i) => (i === me ? null : { fart: !!snap.p[i][1], aim: snap.p[i][3], abs: true, pop: false }));
+      if (G.snap && G.snap !== P.lastSnap) {
+        const snap = G.snap; P.lastSnap = snap;
+        const px = raft.x, pz = raft.z, py = raft.yaw;
+        raft.applyAuth(snap, me);
+        P.others = othersFrom(snap);
+        const acked = snap.q ? snap.q[me] || 0 : P.seq;
+        P.buf = P.buf.filter((e) => e.seq > acked);
+        for (const e of P.buf) { const merged = P.others.map((o, i) => (i === me ? e.inp : o)); raft.step(e.dt, merged, clock); }
+        // keep the visual where it was and let it ease to the corrected spot
+        raft.visOff.x += px - raft.x; raft.visOff.z += pz - raft.z; raft.visOff.yaw += Math.atan2(Math.sin(py - raft.yaw), Math.cos(py - raft.yaw));
+        if (Math.abs(snap.tc - G.trackTime) > 0.25) G.trackTime = snap.tc;
+        G.time = snap.f ? G.time : G.time + dt;
+      } else if (P.others) {
+        const merged = P.others.map((o, i) => (i === me ? mine : o));
+        raft.step(dt, merged, clock);
+      }
       track.update(G.trackTime, dt);
+      raft.events.length = 0;
       for (const g of track.geysers) if (g.field.active && Math.random() < 0.6) effects.geyser(g.field.x, g.field.z);
     } else {
       const inputs = G.online === 'host' ? null : input.read();
@@ -411,7 +469,7 @@ function tick(now, render = true) {
         }
         raft.events.length = 0;
         for (const g of track.geysers) if (g.field.active && Math.random() < 0.6) effects.geyser(g.field.x, g.field.z);
-        if (G.online === 'host' && clock - G.lastSnap > 1 / 30) { G.lastSnap = clock; net.broadcast(raft.snapshot(G.trackTime)); }
+        if (G.online === 'host' && clock - G.lastSnap > 1 / 30) { G.lastSnap = clock; net.broadcast(raft.snapshot(G.trackTime, net.lastSeq.slice(0, raft.count))); }
       }
     }
     raft.syncMesh(clock, dt);

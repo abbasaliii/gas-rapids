@@ -17,11 +17,11 @@ export default {
     const url = new URL(req.url);
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname.endsWith('/id')) return new Response(randomId(), { headers: { ...CORS, 'Content-Type': 'text/plain' } });
-    if (req.headers.get('Upgrade') === 'websocket' || url.pathname.endsWith('/peers')) {
+    if (req.headers.get('Upgrade') === 'websocket' || url.pathname.endsWith('/peers') || url.pathname.startsWith('/daily/')) {
       const stub = env.BROKER.get(env.BROKER.idFromName('global'));
       return stub.fetch(req);
     }
-    return new Response(JSON.stringify({ name: 'Gas Rapids broker', description: 'PeerJS-compatible signaling', ok: true }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ name: 'Toot River broker', description: 'PeerJS-compatible signaling', ok: true }), { headers: { ...CORS, 'Content-Type': 'application/json' } });
   },
 };
 
@@ -30,6 +30,7 @@ export class Broker {
 
   async fetch(req) {
     const url = new URL(req.url);
+    if (url.pathname.startsWith('/daily/')) return this.daily(req, url);
     if (url.pathname.endsWith('/peers')) {
       const ids = this.ctx.getWebSockets().map((ws) => (ws.deserializeAttachment() || {}).id).filter(Boolean);
       return new Response(JSON.stringify(ids), { headers: { ...CORS, 'Content-Type': 'application/json' } });
@@ -51,6 +52,32 @@ export class Broker {
     const q = this.queue.get(id);
     if (q) { this.queue.delete(id); for (const { msg } of q) try { server.send(JSON.stringify(msg)); } catch {} }
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** Daily River leaderboard: GET /daily/top?day=YYYY-MM-DD, POST /daily/score {day, name, time, crew}. Best time per name, top 100 kept. */
+  async daily(req, url) {
+    const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+    const dayOk = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+    if (req.method === 'GET' && url.pathname === '/daily/top') {
+      const day = url.searchParams.get('day');
+      if (!dayOk(day)) return json({ error: 'day' }, 400);
+      const list = (await this.ctx.storage.get('daily:' + day)) || [];
+      return json({ day, top: list.slice(0, 20) });
+    }
+    if (req.method === 'POST' && url.pathname === '/daily/score') {
+      let b; try { b = await req.json(); } catch { return json({ error: 'json' }, 400); }
+      const day = String(b.day || ''), name = String(b.name || 'Player').slice(0, 12).replace(/[^\w .'-]/g, ''), time = +b.time, crew = Math.min(4, Math.max(1, +b.crew || 1));
+      if (!dayOk(day) || !(time > 10 && time < 3600)) return json({ error: 'bad' }, 400);
+      const key = 'daily:' + day;
+      let list = (await this.ctx.storage.get(key)) || [];
+      const i = list.findIndex((e) => e.name.toLowerCase() === name.toLowerCase());
+      if (i >= 0) { if (time < list[i].time) list[i] = { name, time, crew }; }
+      else list.push({ name, time, crew });
+      list.sort((a, b2) => a.time - b2.time); list = list.slice(0, 100);
+      await this.ctx.storage.put(key, list);
+      return json({ ok: true, rank: list.findIndex((e) => e.name === name) + 1, top: list.slice(0, 20) });
+    }
+    return json({ error: 'route' }, 404);
   }
 
   webSocketMessage(ws, data) {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { loadModel } from './models.js';
 
 const mat = (c) => new THREE.MeshLambertMaterial({ color: c });
 const white = mat(0xffffff), black = mat(0x1b1d24), pinkM = mat(0xff8fb1);
@@ -131,20 +132,36 @@ export function makeAnimal(kind) {
     head.add(br); brows.push(br);
   }
 
-  let fart = 0, cheer = false, phase = Math.random() * 10;
+  let fart = 0, cheer = false, phase = Math.random() * 10, lastT = null;
+  // the primitive build above is the instant placeholder; the real model replaces it once loaded
+  let model = null, mixer = null;
+  const headless = typeof window === 'undefined' || !window.requestAnimationFrame;
+  if (!headless) loadModel(kind).then((m) => {
+    model = m.group; mixer = m.mixer;
+    g.remove(body);
+    model.position.y = 0.05;
+    g.add(model);
+  }).catch(() => {});
   return {
     group: g,
     setFart(active) { fart = active ? Math.min(1, fart + 0.3) : Math.max(0, fart - 0.08); },
     setCheer(on) { cheer = on; },
     update(t) {
+      const dt = lastT == null ? 0 : Math.min(0.1, t - lastT); lastT = t;
       const bob = Math.sin(t * 2.2 + phase) * 0.03;
       const hop = cheer ? Math.abs(Math.sin(t * 7 + phase)) * 0.35 : 0;
-      body.position.y = bob - fart * 0.18 + hop;
-      body.scale.set(1 + fart * 0.12, 1 - fart * 0.16 + (cheer ? 0.05 : 0), 1 + fart * 0.1);
-      head.scale.setScalar(1 + fart * 0.14);
-      head.rotation.x = -fart * 0.25 + Math.sin(t * 3 + phase) * 0.03 + (cheer ? -0.3 : 0);
-      head.rotation.z = fart ? Math.sin(t * 40) * 0.06 * fart : cheer ? Math.sin(t * 9 + phase) * 0.2 : 0;
-      for (const br of brows) br.visible = fart > 0.3;
+      const target = model || body;
+      target.position.y = (model ? 0.05 : 0) + bob - fart * 0.18 + hop;
+      target.scale.set(1 + fart * 0.12, 1 - fart * 0.16 + (cheer ? 0.05 : 0), 1 + fart * 0.1);
+      // strain: lean back and quiver while tooting, nod while cheering
+      target.rotation.x = -fart * 0.22 + (cheer ? Math.sin(t * 9 + phase) * 0.12 : 0);
+      target.rotation.z = fart ? Math.sin(t * 40) * 0.05 * fart : 0;
+      if (!model) {
+        head.scale.setScalar(1 + fart * 0.14);
+        head.rotation.x = -fart * 0.25 + Math.sin(t * 3 + phase) * 0.03 + (cheer ? -0.3 : 0);
+        for (const br of brows) br.visible = fart > 0.3;
+      }
+      if (mixer) mixer.update(dt * (fart ? 2.5 : 1));
     },
   };
 }

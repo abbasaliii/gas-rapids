@@ -3,8 +3,21 @@
  * Toots are layered: a wet low "brrr" (two detuned saws through a resonant low-pass, fluttered at 20-40 Hz),
  * a breathy "pfff" (band-passed noise), and a short squelch on the way in. Each seat has its own pitch.
  */
+const BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) || './';
+const TOOT_FILES = Array.from({ length: 11 }, (_, i) => `${BASE}sfx/fart${i + 1}.ogg`);
+const MUSIC_FILES = { race: `${BASE}music/race.ogg`, menu: `${BASE}music/menu.ogg`, victory: `${BASE}music/victory.mp3` };
+
 export class Audio {
-  constructor() { this.ctx = null; this.enabled = true; this.musicOn = true; this.voices = new Map(); }
+  constructor() { this.ctx = null; this.enabled = true; this.musicOn = true; this.voices = new Map(); this.samples = []; this.music = {}; this.track = null; }
+  /** fetch and decode the recorded toots and the music; anything that fails simply falls back to the synth */
+  async loadAssets() {
+    if (!this.ctx || this.loading) return; this.loading = true;
+    const dec = async (url) => { try { const r = await fetch(url); if (!r.ok) throw 0; return await this.ctx.decodeAudioData(await r.arrayBuffer()); } catch { return null; } };
+    const toots = await Promise.all(TOOT_FILES.map(dec));
+    this.samples = toots.filter(Boolean);
+    for (const [k, url] of Object.entries(MUSIC_FILES)) this.music[k] = await dec(url);
+    if (this.wantMusic && this.music[this.wantMusic]) this.startMusic(this.wantMusic);
+  }
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const ctx = (this.ctx = new (window.AudioContext || window.webkitAudioContext)());
@@ -20,6 +33,7 @@ export class Audio {
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
     const g = ctx.createGain(); g.gain.value = 0.045;
     amb.connect(lp).connect(g).connect(this.master); amb.start();
+    this.loadAssets();
   }
   setEnabled(on) { this.enabled = on; if (this.master) this.master.gain.value = on ? 0.75 : 0; }
   setMusic(on) { this.musicOn = on; if (this.musicBus) this.musicBus.gain.value = on ? 0.2 : 0; }
@@ -28,6 +42,7 @@ export class Audio {
   // ---------------------------------------------------------------- toots
   fartStart(seat) {
     if (!this.ok || this.voices.has(seat)) return;
+    if (this.samples.length) return this.sampleStart(seat);
     const ctx = this.ctx, t = ctx.currentTime;
     const base = [78, 104, 66, 90][seat % 4] * (0.92 + Math.random() * 0.16);
     const out = ctx.createGain(); out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(0.55, t + 0.05);
@@ -57,9 +72,34 @@ export class Audio {
     [o1, o2, o3, n, lfo, wob].forEach((x) => x.start(t));
     this.voices.set(seat, { out, nodes: [o1, o2, o3, n, lfo, wob] });
   }
+  /** recorded toots: play one clip after another while the key is held, each pitched a little differently per seat */
+  sampleStart(seat) {
+    const ctx = this.ctx;
+    const out = ctx.createGain(); out.gain.setValueAtTime(0.0001, ctx.currentTime); out.gain.linearRampToValueAtTime(0.9, ctx.currentTime + 0.03);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5000;
+    out.connect(lp).connect(this.sfx);
+    const v = { out, nodes: [], sample: true, alive: true, seat };
+    const rate = [0.9, 1.08, 0.8, 1.0][seat % 4];
+    const playNext = () => {
+      if (!v.alive) return;
+      const buf = this.samples[Math.floor(Math.random() * this.samples.length)];
+      const src = ctx.createBufferSource(); src.buffer = buf; src.playbackRate.value = rate * (0.92 + Math.random() * 0.16);
+      src.connect(out); src.start(); v.nodes.push(src);
+      src.onended = () => { v.nodes = v.nodes.filter((n) => n !== src); if (v.alive) playNext(); };
+    };
+    playNext();
+    this.voices.set(seat, v);
+  }
   fartStop(seat) {
     const v = this.voices.get(seat); if (!v) return;
     const ctx = this.ctx, t = ctx.currentTime;
+    if (v.sample) {
+      v.alive = false;
+      v.out.gain.cancelScheduledValues(t); v.out.gain.setValueAtTime(v.out.gain.value, t); v.out.gain.linearRampToValueAtTime(0, t + 0.12);
+      for (const n of v.nodes) try { n.stop(t + 0.14); } catch {}
+      this.voices.delete(seat);
+      return;
+    }
     v.out.gain.cancelScheduledValues(t); v.out.gain.setValueAtTime(v.out.gain.value, t); v.out.gain.linearRampToValueAtTime(0, t + 0.09);
     for (const n of v.nodes) n.stop(t + 0.12);
     this.voices.delete(seat);
@@ -137,7 +177,18 @@ export class Audio {
    * Everything is scheduled a little ahead so it never stutters when the game is busy.
    */
   startMusic(mode = 'race') {
-    if (!this.ctx || this.musicTimer) return;
+    if (!this.ctx) return;
+    this.wantMusic = mode;
+    if (this.music[mode]) {
+      if (this.track && this.track.mode === mode) return;
+      this.stopMusic(true);
+      const src = this.ctx.createBufferSource(); src.buffer = this.music[mode]; src.loop = mode !== 'victory';
+      const g = this.ctx.createGain(); g.gain.setValueAtTime(0.0001, this.ctx.currentTime); g.gain.linearRampToValueAtTime(mode === 'menu' ? 0.7 : 0.85, this.ctx.currentTime + 0.6);
+      src.connect(g).connect(this.musicBus); src.start();
+      this.track = { src, g, mode };
+      return;
+    }
+    if (this.musicTimer) return;
     const ctx = this.ctx;
     const bpm = mode === 'race' ? 118 : 100, beat = 60 / bpm, step = beat / 4;
     const chords = [[0, 4, 7], [7, 11, 14], [9, 12, 16], [5, 9, 12], [9, 12, 16], [5, 9, 12], [0, 4, 7], [7, 11, 14]]; // semitones over C
@@ -168,7 +219,11 @@ export class Audio {
     };
     this.musicTimer = setInterval(tick, 100); tick();
   }
-  stopMusic() { if (this.musicTimer) { clearInterval(this.musicTimer); this.musicTimer = null; } }
+  stopMusic(keepWant = false) {
+    if (!keepWant) this.wantMusic = null;
+    if (this.musicTimer) { clearInterval(this.musicTimer); this.musicTimer = null; }
+    if (this.track) { const { src, g } = this.track; const t = this.ctx.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.linearRampToValueAtTime(0, t + 0.4); try { src.stop(t + 0.45); } catch {} this.track = null; }
+  }
   pluck(freq, t, vol) {
     const ctx = this.ctx;
     const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = freq;

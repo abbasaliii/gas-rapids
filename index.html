@@ -46,14 +46,30 @@
       <label class="opt"><input type="checkbox" id="opt-music" checked /> Music</label>
     </div>
     <p class="hint">Local co-op: up to four on one keyboard. Any seat nobody takes is crewed by a bot that toots when you do.</p>
+    <button id="credits-open" class="linkbtn">Credits</button>
+  </div>
+  <div id="credits" class="credits" hidden>
+    <div class="card">
+      <h2>Credits</h2>
+      <ul>
+        <li>Game, levels, code: Toot River team.</li>
+        <li>Pig and raccoon models by <b>Quaternius</b> (CC0).</li>
+        <li>Skunk, frog and seal models from <b>Poly by Google</b> (CC BY 3.0).</li>
+        <li>Toot recordings "Gastric Distress" by <b>LFA</b> on OpenGameArt (CC0).</li>
+        <li>Music "Feel Good Island Loop", "Funky Menu Loop" and "Funky Victory Loop" from OpenGameArt (CC0).</li>
+        <li>Built with Three.js, PeerJS and Vite (MIT).</li>
+      </ul>
+      <button id="credits-close" class="btn ghost">Close</button>
+    </div>
   </div>
 
   <!-- level select -->
   <div id="levels" class="screen levels" hidden>
     <h1 class="h">LEVELS</h1>
+    <div id="daily" class="worlds dailywrap"></div>
     <div class="row setup">
       <div class="players" id="players"><span>Players</span><button data-n="1">1</button><button data-n="2">2</button><button data-n="3">3</button><button data-n="4">4</button></div>
-      <label class="opt"><input type="checkbox" id="opt-bots" /> Add crew bots to the empty seats</label>
+      <label class="opt"><input type="checkbox" id="opt-bots" checked /> Crew bots fill the empty seats</label>
     </div>
     <div class="seats" id="seats"></div>
     <div id="worlds" class="worlds"></div>
@@ -99,6 +115,11 @@
     <div class="stars" id="stars"><i>★</i><i>★</i><i>★</i></div>
     <div class="result"><span id="f-time">00:00.00</span><small id="f-sub">retries 0</small></div>
     <div id="f-best" class="best"></div>
+    <div id="daily-submit" class="row" hidden>
+      <input id="daily-name" class="field" placeholder="Your name for the board" maxlength="12" />
+      <button id="daily-send" class="btn alt">Submit to today's board</button>
+      <span id="daily-result" class="hint"></span>
+    </div>
     <div class="row">
       <button id="next" class="btn">Next level</button>
       <button id="again" class="btn alt">Race again</button>

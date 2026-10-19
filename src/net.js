@@ -8,7 +8,11 @@ import Peer from 'peerjs';
 export { Peer };
 
 const PREFIX = 'gasrapids-v1-';
-const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
+// STUN for the common case; a public TURN relay (Open Relay Project, free) for players behind strict NATs.
+const ICE = { iceServers: [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turns:openrelay.metered.ca:443'], username: 'openrelayproject', credential: 'openrelayproject' },
+] };
 // Our own broker (server/ folder, Cloudflare Worker). Set VITE_PEER_HOST in .env; without it the public PeerJS broker is used.
 const BROKER = import.meta.env.VITE_PEER_HOST
   ? { host: import.meta.env.VITE_PEER_HOST, port: 443, secure: true, path: '/', key: 'peerjs' }
@@ -23,6 +27,7 @@ export class Net {
     this.hostConn = null;              // client side
     this.seats = [null, null, null, null]; // {id, name}
     this.inputs = [null, null, null, null]; // host side: latest input per seat
+    this.lastSeq = [0, 0, 0, 0];             // host side: sequence number of the latest input received per seat
     this.level = 0; this.mySeat = -1;
     this.listeners = {};
     this.voice = new Voice(this);
@@ -77,7 +82,7 @@ export class Net {
       this.broadcast(this.lobby()); this.emit('lobby', this.lobby());
     } else if (d.t === 'in') {
       const i = this.seats.findIndex((s) => s && s.id === c.peer);
-      if (i >= 0) this.inputs[i] = { fart: !!d.f, aim: +d.a || 0, pop: !!d.p || !!(this.inputs[i] && this.inputs[i].pop) }; // pops latch until the host consumes them
+      if (i >= 0) { this.inputs[i] = { fart: !!d.f, aim: +d.a || 0, pop: !!d.p || !!(this.inputs[i] && this.inputs[i].pop) }; if (d.q) this.lastSeq[i] = d.q; } // pops latch until the host consumes them
     }
   }
   lobby() { return { t: 'lobby', code: this.code, level: this.level, seats: this.seats.map((s) => (s ? { id: s.id, name: s.name } : null)) }; }
@@ -106,11 +111,11 @@ export class Net {
     c.send({ t: 'hello', name });
   }
   sendHost(msg) { if (this.hostConn && this.hostConn.open) this.hostConn.send(msg); }
-  sendInput(inp) {
-    const m = { t: 'in', f: inp.fart ? 1 : 0, a: +inp.aim.toFixed(2), p: inp.pop ? 1 : 0 };
+  sendInput(inp, seq = 0) {
+    const m = { t: 'in', f: inp.fart ? 1 : 0, a: +inp.aim.toFixed(2), p: inp.pop ? 1 : 0, q: seq };
     const key = m.f + '|' + m.a + '|' + m.p;
     const now = performance.now();
-    if (key !== this._lastKey || now - (this._lastSent || 0) > 100) { this._lastKey = key; this._lastSent = now; this.sendHost(m); }
+    if (key !== this._lastKey || now - (this._lastSent || 0) > 50) { this._lastKey = key; this._lastSent = now; this.sendHost(m); }
   }
   /** every peer id in the party except ours */
   others() { return this.seats.filter((s) => s && s.id !== this.peer?.id).map((s) => s.id); }

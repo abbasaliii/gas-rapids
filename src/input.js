@@ -26,21 +26,22 @@ export class Input {
   claim(i) { if (!this.claimed[i]) { this.claimed[i] = true; this.listeners.forEach((cb) => cb(i)); } }
   bindTouch(el) {
     if (!el) return;
-    const zones = [['left', 0, 0.38, 'AIM ◀'], ['mid', 0.38, 0.62, 'FART'], ['right', 0.62, 1, 'AIM ▶']];
-    const active = new Map();
-    for (const [name, a, b, label] of zones) {
-      const z = document.createElement('div');
-      z.className = 'zone'; z.textContent = label;
-      z.style.left = a * 100 + '%'; z.style.width = (b - a) * 100 + '%'; z.style.top = '0'; z.style.bottom = '0';
-      const on = (e) => { e.preventDefault(); active.set(name, true); this.claim(0); this.sync(active); };
-      const off = (e) => { e.preventDefault(); active.delete(name); this.sync(active); };
-      z.addEventListener('pointerdown', on); z.addEventListener('pointerup', off); z.addEventListener('pointercancel', off); z.addEventListener('pointerleave', off);
-      el.appendChild(z);
+    // left: steer pad (A / D), right: big TOOT button. Multi-touch via pointer events, one finger per control.
+    const mk = (cls, label) => { const z = document.createElement('div'); z.className = 'tbtn ' + cls; z.innerHTML = label; el.appendChild(z); return z; };
+    const left = mk('steer left', '◀'), right = mk('steer right', '▶'), toot = mk('toot', 'TOOT');
+    const held = new Map(); // pointerId -> name
+    const press = (name) => (e) => { e.preventDefault(); held.set(e.pointerId, name); e.currentTarget.classList.add('down'); this.claim(0); this.syncTouch(held); };
+    const release = (e) => { const name = held.get(e.pointerId); held.delete(e.pointerId); [left, right, toot].forEach((b) => { if (![...held.values()].includes(b.dataset.n)) b.classList.remove('down'); }); this.syncTouch(held); };
+    for (const [b, name] of [[left, 'left'], [right, 'right'], [toot, 'fart']]) {
+      b.dataset.n = name;
+      b.addEventListener('pointerdown', press(name));
+      for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, release);
     }
   }
-  sync(active) {
-    this.touch.fart = active.size > 0;
-    this.touch.aim = (active.has('right') ? 1 : 0) - (active.has('left') ? 1 : 0);
+  syncTouch(held) {
+    const v = [...held.values()];
+    this.touch.fart = v.includes('fart');
+    this.touch.aim = (v.includes('right') ? 1 : 0) - (v.includes('left') ? 1 : 0);
   }
   /** Online: every key set, the first gamepad and touch all drive the one local seat. */
   readAny() {
