@@ -11,7 +11,8 @@ Four animals, one raft, one button each. Toot together or spin into the spikes. 
 
 ## Clips (the whole marketing plan)
 - In-game: press **R** or tap ⏺ during a race, or turn on "Record every race" in Settings. The finish screen offers **Share clip** (straight to TikTok/WhatsApp on phones) or **Download clip** (WebM; convert to MP4 with `ffmpeg -i clip.webm clip.mp4`).
-- Trailer: `trailer-landscape.mp4` (16:9) and `trailer-vertical.mp4` (9:16) are rendered from the game itself by `tools/frames-server.mjs` plus the capture script; re-render any time the game changes.
+- Trailer: `trailer-landscape.mp4` (16:9) is rendered from the game itself (frames captured in the browser via `tools/frames-server.mjs`, assembled with ffmpeg). The 9:16 version for TikTok/Reels is cut from the same frames; on a busy PC the encode can take a long time, so run it when the machine is idle:
+  `ffmpeg -nostdin -y -loop 1 -t 2 -i card-title-9x16.png -framerate 30 -i <frames>/f_%05d.jpg -loop 1 -t 2.5 -i card-end-9x16.png -i ../public/music/race.ogg -filter_complex "[1:v]scale=720:-2,pad=720:1280:0:(1280-ih)/2:color=#2f96ff,setsar=1,format=yuv420p[g];[0:v]scale=720:1280,setsar=1,format=yuv420p,fps=30[a];[2:v]scale=720:1280,setsar=1,format=yuv420p,fps=30[c];[a][g][c]concat=n=3:v=1:a=0[v];[3:a]atrim=0:26.5,afade=t=out:st=24.5:d=2[m]" -map "[v]" -map "[m]" -c:v libx264 -preset veryfast -crf 22 -c:a aac trailer-vertical.mp4`
 - What works in this genre (from the games that sold millions): real people screaming on a call, the raft spinning at the worst moment, a death right before the finish, one person tooting the wrong way. Never a feature list.
 - Post format: 9:16, 8 to 20 seconds, faces or voices in it if you can, caption on screen in the first second ("we are NOT good at this"), game name at the end, link in bio.
 
