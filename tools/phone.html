@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Phone emulator (dev)</title>
+<!-- Dev-only: shows the game inside a phone-sized same-origin iframe with the coarse-pointer CSS forced on,
+     so touch controls, the compact HUD and the close camera can be checked on a desktop.
+     Open http://localhost:5186/tools/phone.html?w=844&h=390 (landscape) or ?w=390&h=844 (portrait). -->
+<body style="margin:0;background:#222;padding:12px;font:13px system-ui;color:#ddd">
+<div id="info" style="margin-bottom:8px"></div>
+<script>
+  const q = new URLSearchParams(location.search), w = +(q.get('w') || 844), h = +(q.get('h') || 390);
+  const f = document.createElement('iframe'); f.id = 'phone'; f.width = w; f.height = h;
+  f.style.cssText = `width:${w}px;height:${h}px;border:4px solid #000;border-radius:18px;background:#000;display:block`;
+  f.src = '/?emu=' + Date.now(); document.body.appendChild(f);
+  f.addEventListener('load', () => {
+    const win = f.contentWindow, doc = f.contentDocument, mm = win.matchMedia.bind(win);
+    win.matchMedia = (m) => /pointer\s*:\s*coarse/.test(m) ? { matches: true, media: m, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} } : mm(m);
+    for (const ss of [...doc.styleSheets]) { try { for (const r of [...ss.cssRules]) { if (r.media && /pointer\s*:\s*coarse/.test(r.media.mediaText)) r.media.mediaText = r.media.mediaText.replace(/\(pointer\s*:\s*coarse\)/g, '(min-width:0px)'); } } catch {} }
+    document.getElementById('info').textContent = `phone ${w}x${h}, coarse pointer forced`;
+  });
+</script>

@@ -14,7 +14,7 @@ import { dailyLevel, todayKey } from './daily.js';
 import { Recorder } from './recorder.js';
 
 const BROKER_URL = 'https://' + (import.meta.env.VITE_PEER_HOST || 'toot-river-broker.gas-rapids.workers.dev');
-const VERSION = '0.9.1';
+const VERSION = '0.9.2';
 // socials and support links: fill these in when the accounts exist; empty ones are hidden
 const SOCIAL = { TikTok: '', Instagram: '', YouTube: '', Discord: '', 'Support us': '' };
 // crash reports go to our own broker (no third party); a few per session at most
@@ -172,6 +172,12 @@ function loadLevel(idx, crew) {
   return { level, track, raft };
 }
 
+// first-race hint, worded for the controls the player actually has
+function raceHint(online) {
+  if (matchMedia('(pointer: coarse)').matches) return 'HOLD TOOT · ◀ ▶ TURN YOUR ARROW · THE RAFT GOES WHERE IT POINTS';
+  if (!online && players > 1) return 'HOLD YOUR TOOT KEY · SIDE KEYS TURN YOUR ARROW · THE RAFT GOES WHERE THE ARROWS POINT';
+  return 'HOLD SPACE TO TOOT · A / D TURN YOUR ARROW · THE RAFT GOES WHERE IT POINTS';
+}
 function startGame(opts = {}) {
   audio.init(); audio.setEnabled(ui.sound.checked); audio.setMusic(ui.music.checked);
   const online = opts.online || null; // 'host' | 'client' | null
@@ -213,7 +219,7 @@ function showFinish(time, retries, isClient) {
   $('daily-submit').hidden = idx !== 'daily';
   if (idx === 'daily') { $('daily-name').value = (localStorage.getItem('tootriver-name') || ''); $('daily-result').textContent = ''; $('daily-submit').dataset.time = time; $('daily-submit').dataset.crew = G.raft.count; }
   ui.fBest.textContent = newBest ? (p.best ? `New best! Previous ${fmtTime(p.best)}` : 'First finish. That is the time to beat.') : `Best ${fmtTime(p.best)}`;
-  if (stars < 3) ui.fBest.textContent += ` · gold under ${level.stars[0]}s`;
+  if (stars < 3 && idx !== 'daily') ui.fBest.textContent += ` · gold under ${level.stars[0]}s`;
   const starEls = ui.stars.querySelectorAll('i');
   starEls.forEach((s) => s.classList.remove('on'));
   ui.next.hidden = isClient || idx === 'daily' || idx + 1 >= LEVELS.length;
@@ -295,7 +301,11 @@ ui.play.addEventListener('click', () => { audio.init(); audio.setMusic(ui.music.
 $('credits-open').addEventListener('click', () => { $('credits').hidden = false; });
 $('credits-close').addEventListener('click', () => { $('credits').hidden = true; });
 ui.levelsBack.addEventListener('click', () => { show(ui.title); mode = 'title'; });
-ui.next.addEventListener('click', () => { selectedLevel = Math.min(LEVELS.length - 1, G.idx + 1); startGame(); });
+ui.next.addEventListener('click', () => {
+  const nxt = Math.min(LEVELS.length - 1, G.idx + 1);
+  if (G && G.online === 'host') { net.level = nxt; $('lobby-level').value = String(nxt); hostStart(); return; }
+  selectedLevel = nxt; startGame();
+});
 $('daily-send').addEventListener('click', async () => {
   const box = $('daily-submit'); const name = ($('daily-name').value.trim() || 'Player').slice(0, 12);
   try { localStorage.setItem('tootriver-name', name); } catch {}
@@ -419,7 +429,7 @@ net.on('ev', (d) => {
   if (d.e === 'bump') { audio.bump(d.k); effects.splash(G.raft.x, G.raft.z, 8); }
   if (d.e === 'geyser') { audio.geyser(); effects.shake = 1; }
   if (d.e === 'can') G.hud.toast('BEANS!');
-  if (d.e === 'cd') { G.hud.countdown(d.v); if (d.v) audio.beep(d.v === 'GO!'); if (d.v === 'GO!') { G.hud.hint('HOLD SPACE TO TOOT · A / D TURN YOUR ARROW'); setTimeout(() => G && G.hud.hint(''), 9000); } }
+  if (d.e === 'cd') { G.hud.countdown(d.v); if (d.v) audio.beep(d.v === 'GO!'); if (d.v === 'GO!') { G.hud.hint(raceHint(true)); setTimeout(() => G && G.hud.hint(''), 9000); } }
   if (d.e === 'finish') { audio.fanfare(); audio.startMusic('victory'); G.hud.toast('FINISH!'); effects.confetti(G.raft.x, G.raft.z, 90); }
 });
 net.on('end', (d) => { if (G && G.online === 'client') { G.time = d.time; G.raft.cans = d.cans || 0; setTimeout(() => { if (G && G.online === 'client') showFinish(d.time, d.retries, true); }, 1700); } });
@@ -476,7 +486,7 @@ function lowerQuality() {
 }
 function frame(now) { requestAnimationFrame(frame); tick(now); }
 // debug/automation hook: window.tootRiver.tick(seconds) advances the game without waiting for rAF
-window.tootRiver = { tick(sec = 1, fps = 60) { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) tick(last + 1000 / fps, i === n - 1); }, get state() { return G; }, startGame, net, setLevel(i) { selectedLevel = i; }, prog, LEVELS };
+window.tootRiver = { tick(sec = 1, fps = 60) { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) tick(last + 1000 / fps, i === n - 1); }, get state() { return G; }, startGame, net, setLevel(i) { selectedLevel = i; }, get prog() { return prog; }, LEVELS };
 function tick(now, render = true) {
   let dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = Math.max(last, now);
   clock += dt;
@@ -510,7 +520,7 @@ function tick(now, render = true) {
         // keep the visual where it was and let it ease to the corrected spot
         raft.visOff.x += px - raft.x; raft.visOff.z += pz - raft.z; raft.visOff.yaw += Math.atan2(Math.sin(py - raft.yaw), Math.cos(py - raft.yaw));
         if (Math.abs(snap.tc - G.trackTime) > 0.25) G.trackTime = snap.tc;
-        G.time = snap.f ? G.time : G.time + dt;
+        G.time = snap.f ? G.time : (snap.rt != null && Math.abs(snap.rt - G.time) > 0.3 ? snap.rt : G.time + dt);
       } else if (P.others) {
         const merged = P.others.map((o, i) => (i === me ? mine : o));
         raft.step(dt, merged, clock);
@@ -525,7 +535,7 @@ function tick(now, render = true) {
         const n = Math.ceil(G.cd);
         const label = n > 0 ? String(n) : 'GO!';
         if (label !== G.cdShown) { G.cdShown = label; hud.countdown(label); audio.beep(n <= 0); if (G.online === 'host') net.broadcast({ t: 'ev', e: 'cd', v: label }); }
-        if (G.cd <= 0) { G.phase = 'race'; G.hintT = 12; hud.hint(G.online ? 'HOLD SPACE TO TOOT · A / D TURN YOUR ARROW' : players > 1 ? 'HOLD YOUR TOOT KEY · SIDE KEYS TURN YOUR ARROW · THE RAFT GOES WHERE THE ARROWS POINT' : 'HOLD SPACE TO TOOT · A / D TURN YOUR ARROW · THE RAFT GOES WHERE IT POINTS'); }
+        if (G.cd <= 0) { G.phase = 'race'; G.hintT = 12; hud.hint(raceHint(!!G.online)); }
         if (G.cd < -0.9) { hud.countdown(''); if (G.online === 'host') net.broadcast({ t: 'ev', e: 'cd', v: '' }); }
       } else if (G.phase === 'race' || G.phase === 'finished') {
         if (G.phase === 'race') G.time += dt;
@@ -561,7 +571,7 @@ function tick(now, render = true) {
         }
         raft.events.length = 0;
         for (const g of track.geysers) if (g.field.active && Math.random() < 0.6) effects.geyser(g.field.x, g.field.z);
-        if (G.online === 'host' && clock - G.lastSnap > 1 / 30) { G.lastSnap = clock; net.broadcast(raft.snapshot(G.trackTime, net.lastSeq.slice(0, raft.count))); }
+        if (G.online === 'host' && clock - G.lastSnap > 1 / 30) { G.lastSnap = clock; net.broadcast(Object.assign(raft.snapshot(G.trackTime, net.lastSeq.slice(0, raft.count)), { rt: +G.time.toFixed(2) })); }
       }
     }
     raft.syncMesh(clock, dt);

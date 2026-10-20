@@ -27,7 +27,7 @@ export class Recorder {
     this.startedAt = performance.now();
     return true;
   }
-  stop() { if (this.recording) this.rec.stop(); }
+  stop() { if (this.recording) { this.lastSeconds = Math.round(this.seconds); this.rec.stop(); } }
   /** mix in every party member's voice so the clip has the screaming too */
   syncVoice() {
     if (!this.dest || !this.net) return;
